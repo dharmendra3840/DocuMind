@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker --version)",
+      "PowerShell(docker info --format \"{{.ServerVersion}}\" 2>&1)"
+    ]
+  }
+}
