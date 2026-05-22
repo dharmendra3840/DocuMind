@@ -85,7 +85,6 @@ export const useAppStore = create<AppState>()(
         }
         state?.setHydrated(true);
       },
-      },
     }
   )
 );
