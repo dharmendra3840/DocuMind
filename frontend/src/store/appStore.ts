@@ -10,6 +10,7 @@ interface AppState {
   activeWorkspaceId: string | null;
   workspaces: Workspace[];
   sidebarOpen: boolean;
+  hydrated: boolean;
 
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   clearAuth: () => void;
@@ -19,6 +20,7 @@ interface AppState {
   updateWorkspace: (workspace: Workspace) => void;
   removeWorkspace: (id: string) => void;
   toggleSidebar: () => void;
+  setHydrated: (hydrated: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -30,6 +32,7 @@ export const useAppStore = create<AppState>()(
       activeWorkspaceId: null,
       workspaces: [],
       sidebarOpen: true,
+      hydrated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
         apiClient.setAccessToken(accessToken);
@@ -65,6 +68,8 @@ export const useAppStore = create<AppState>()(
         }),
 
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+      setHydrated: (hydrated) => set({ hydrated }),
     }),
     {
       name: "documind-store",
@@ -78,6 +83,8 @@ export const useAppStore = create<AppState>()(
         if (state?.accessToken) {
           apiClient.setAccessToken(state.accessToken);
         }
+        state?.setHydrated(true);
+      },
       },
     }
   )
