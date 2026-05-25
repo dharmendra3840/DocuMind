@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import settings
-from app.api.v1 import auth, workspaces, documents, conversations
+from app.api.v1 import auth, workspaces, documents, conversations, oauth
 from app.db.session import engine, Base
 from app.utils.logger import get_logger
 
@@ -52,6 +52,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(oauth.router, prefix="/api/v1/auth", tags=["oauth"])
 app.include_router(workspaces.router, prefix="/api/v1/workspaces", tags=["workspaces"])
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
 app.include_router(conversations.router, prefix="/api/v1/conversations", tags=["conversations"])

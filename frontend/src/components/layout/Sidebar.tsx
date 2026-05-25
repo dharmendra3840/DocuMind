@@ -120,7 +120,7 @@ export function Sidebar() {
     const refreshToken = localStorage.getItem("refresh_token") ?? "";
     await apiClient.logout(refreshToken);
     clearAuth();
-    router.push("/login");
+    router.push("/");
   };
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);

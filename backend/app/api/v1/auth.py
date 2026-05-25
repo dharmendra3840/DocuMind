@@ -10,6 +10,7 @@ from app.db.models.refresh_token import RefreshToken
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.exceptions import CredentialsException, ConflictException
 from app.schemas.auth import UserRegister, UserLogin, TokenResponse, AccessTokenResponse, RefreshTokenRequest, UserOut
+from app.api.v1.deps import get_current_user
 from jose import JWTError
 
 router = APIRouter()
@@ -78,6 +79,11 @@ async def refresh(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db))
     await db.commit()
 
     return AccessTokenResponse(access_token=new_access)
+
+
+@router.get("/me", response_model=UserOut)
+async def me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @router.post("/logout")

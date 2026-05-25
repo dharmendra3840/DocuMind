@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     local_upload_dir: str = "uploads"
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    backend_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
+
     # CORS
     allowed_origins: str = "http://localhost:3000"
     allowed_origin_regex: str = ""
