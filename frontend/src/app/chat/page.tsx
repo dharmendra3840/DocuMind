@@ -6,8 +6,9 @@ import { apiClient } from "@/lib/api";
 import { TopBar } from "@/components/layout/TopBar";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { toastError } from "@/components/ui/Toaster";
+import AppLayout from "@/components/layout/AppLayout";
 
-export default function NewChatPage() {
+function NewChatPage() {
   const router = useRouter();
   const { activeWorkspaceId } = useAppStore();
   const [creating, setCreating] = useState(false);
@@ -39,4 +40,8 @@ export default function NewChatPage() {
       <MessageInput onSend={handleSend} disabled={creating || !activeWorkspaceId} />
     </div>
   );
+}
+
+export default function ChatPage() {
+  return <AppLayout><NewChatPage /></AppLayout>;
 }

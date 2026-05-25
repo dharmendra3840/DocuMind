@@ -11,7 +11,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    
     if (!user || !accessToken) {
       router.replace("/login");
     } else {

@@ -8,11 +8,12 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { TopBar } from "@/components/layout/TopBar";
 import { useAppStore } from "@/store/appStore";
+import AppLayout from "@/components/layout/AppLayout";
 import type { Source } from "@/types/api";
 import { FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function ConversationPage() {
+function ConversationPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q");
@@ -48,7 +49,6 @@ export default function ConversationPage() {
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <div className="flex flex-col flex-1 min-w-0">
-          {/* Document filter bar — only shown when there are ready docs */}
           {readyDocs.length > 0 && (
             <div className="px-4 py-2 border-b border-border bg-bg-secondary flex items-center gap-2 flex-wrap">
               <span className="text-xs text-text-muted shrink-0">Scope:</span>
@@ -84,7 +84,6 @@ export default function ConversationPage() {
               )}
             </div>
           )}
-
           <ChatFeed
             messages={messages}
             isLoading={historyLoading}
@@ -98,4 +97,8 @@ export default function ConversationPage() {
       </div>
     </div>
   );
+}
+
+export default function ChatIdPage() {
+  return <AppLayout><ConversationPage /></AppLayout>;
 }

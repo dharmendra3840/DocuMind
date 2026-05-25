@@ -6,9 +6,10 @@ import { UploadZone } from "@/components/documents/UploadZone";
 import { DocumentTable } from "@/components/documents/DocumentTable";
 import { ChunkViewer } from "@/components/documents/ChunkViewer";
 import { TopBar } from "@/components/layout/TopBar";
+import AppLayout from "@/components/layout/AppLayout";
 import type { Document } from "@/types/api";
 
-export default function DocumentsPage() {
+function DocumentsPage() {
   const { activeWorkspaceId } = useAppStore();
   const { data, isLoading } = useDocuments(activeWorkspaceId);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
@@ -42,4 +43,8 @@ export default function DocumentsPage() {
       </div>
     </div>
   );
+}
+
+export default function DocumentsRoute() {
+  return <AppLayout><DocumentsPage /></AppLayout>;
 }
