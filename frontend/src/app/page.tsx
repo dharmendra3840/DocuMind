@@ -1,370 +1,457 @@
 "use client";
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/appStore";
-import { FileText, Zap, Shield, Search, ChevronRight, Upload, MessageSquare, CheckCircle } from "lucide-react";
+import { apiClient } from "@/lib/api";
+import { FileText, ArrowRight, X, ArrowUpRight } from "lucide-react";
 
+// ─── Auth Modal ────────────────────────────────────────────────────────────────
+function AuthModal({
+  mode,
+  onClose,
+  onSwitch,
+}: {
+  mode: "login" | "register";
+  onClose: () => void;
+  onSwitch: (m: "login" | "register") => void;
+}) {
+  const router = useRouter();
+  const setAuth = useAppStore((s) => s.setAuth);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setError(""); setName(""); setEmail(""); setPassword("");
+  }, [mode]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mode === "register" && password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    setError(""); setLoading(true);
+    try {
+      const data = mode === "login"
+        ? await apiClient.login(email, password)
+        : await apiClient.register(email, password, name);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      setAuth(data.user, data.access_token, data.refresh_token);
+      router.push("/chat");
+    } catch (err: unknown) {
+      setError((err as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? (mode === "login" ? "Invalid credentials" : "Registration failed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      ref={overlayRef}
+      onMouseDown={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+    >
+      <div className="relative w-full max-w-sm bg-[#141927] border border-white/10 rounded-2xl shadow-2xl overflow-hidden modal-appear">
+        {/* Tab strip */}
+        <div className="flex border-b border-white/[0.06]">
+          {(["login", "register"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => onSwitch(t)}
+              className={`flex-1 py-3.5 text-xs font-semibold tracking-wider uppercase transition-colors relative ${
+                mode === t ? "text-text-primary" : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {t === "login" ? "Sign in" : "Create account"}
+              {mode === t && (
+                <span className="absolute bottom-0 inset-x-0 h-px bg-accent" />
+              )}
+            </button>
+          ))}
+          <button
+            onClick={onClose}
+            className="px-4 text-text-muted hover:text-text-primary transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Logo */}
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/30">
+              <span className="text-white text-xs font-black">D</span>
+            </div>
+            <span className="font-bold text-text-primary tracking-tight">DocuMind</span>
+          </div>
+
+          <form onSubmit={submit} className="space-y-4">
+            {mode === "register" && (
+              <Field label="Name">
+                <input value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name" type="text" autoFocus
+                  className="auth-input" />
+              </Field>
+            )}
+            <Field label="Email">
+              <input value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com" type="email" required
+                autoFocus={mode === "login"}
+                className="auth-input" />
+            </Field>
+            <Field label="Password">
+              <input value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === "register" ? "Min. 8 characters" : "••••••••"}
+                type="password" required className="auth-input" />
+            </Field>
+            {error && <p className="text-xs text-accent-red">{error}</p>}
+            <button
+              type="submit" disabled={loading}
+              className="w-full mt-1 bg-accent hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm transition-all shadow-lg shadow-accent/20 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>{mode === "login" ? "Sign in" : "Create account"} <ArrowRight className="w-3.5 h-3.5" /></>
+              )}
+            </button>
+          </form>
+
+          <p className="text-xs text-text-muted text-center mt-4">
+            {mode === "login" ? "No account? " : "Already have one? "}
+            <button
+              onClick={() => onSwitch(mode === "login" ? "register" : "login")}
+              className="text-accent hover:underline"
+            >
+              {mode === "login" ? "Sign up free" : "Sign in"}
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ─── Landing Page ──────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const router = useRouter();
   const { user, hydrated } = useAppStore();
+  const [auth, setAuthState] = useState<"login" | "register" | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    if (hydrated && user) {
-      router.push("/chat");
-    }
+    if (hydrated && user) router.push("/chat");
   }, [hydrated, user, router]);
+
+  const open = useCallback((m: "login" | "register") => setAuthState(m), []);
+  const close = useCallback(() => setAuthState(null), []);
 
   if (!mounted || (hydrated && user)) return null;
 
   return (
-    <div className="min-h-screen bg-bg-primary font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-bg-primary font-sans overflow-x-hidden selection:bg-accent/20">
+      {auth && <AuthModal mode={auth} onClose={close} onSwitch={setAuthState} />}
 
-      {/* ── Navbar ── */}
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-bg-primary/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/30">
-              <span className="text-white text-sm font-bold">D</span>
+      {/* ── Navbar ─────────────────────────────────────────── */}
+      <header className="fixed top-0 inset-x-0 z-40 border-b border-white/[0.06] bg-bg-primary/75 backdrop-blur-xl">
+        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center shadow-md shadow-accent/30">
+              <span className="text-white text-xs font-black">D</span>
             </div>
-            <span className="text-lg font-bold text-text-primary tracking-tight">DocuMind</span>
+            <span className="font-bold text-sm text-text-primary tracking-tight">DocuMind</span>
           </div>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-text-muted hover:text-text-primary transition-colors">Features</a>
-            <a href="#how-it-works" className="text-sm text-text-muted hover:text-text-primary transition-colors">How it works</a>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-4 py-2">
+          <div className="flex items-center gap-2">
+            <button onClick={() => open("login")}
+              className="text-xs font-medium text-text-muted hover:text-text-primary px-4 py-2 rounded-lg transition-colors hover:bg-white/5">
               Log in
-            </Link>
-            <Link
-              href="/register"
-              className="text-sm font-medium bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded-lg transition-colors shadow-lg shadow-accent/20"
-            >
+            </button>
+            <button onClick={() => open("register")}
+              className="text-xs font-semibold bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 px-4 py-2 rounded-lg transition-all">
               Get started
-            </Link>
+            </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* ── Hero ── */}
-      <section className="relative pt-40 pb-32 px-6 overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-accent/8 blur-[120px]" />
-          <div className="absolute top-20 right-1/4 w-[300px] h-[300px] rounded-full bg-indigo-500/5 blur-[80px]" />
+      {/* ── Hero ──────────────────────────────────────────────  */}
+      <section className="relative min-h-screen flex flex-col justify-center items-center px-5 pt-14 pb-12 overflow-hidden">
+        {/* Ambient blobs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="blob blob-1" />
+          <div className="blob blob-2" />
+          <div className="blob blob-3" />
+          {/* Grid overlay */}
+          <div className="absolute inset-0 opacity-[0.03]"
+            style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "64px 64px" }} />
         </div>
 
-        <div className="relative max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left: copy */}
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-accent/30 bg-accent/10 text-accent text-xs font-medium mb-6">
-              <Zap className="w-3 h-3" />
-              AI-Powered Document Intelligence
-            </div>
-
-            <h1 className="text-5xl lg:text-6xl font-bold text-text-primary leading-[1.1] tracking-tight mb-6">
-              Chat With Your{" "}
-              <span className="relative">
-                <span className="bg-gradient-to-r from-accent via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                  Documents
-                </span>
-              </span>
-              .{" "}
-              <br className="hidden lg:block" />
-              Get Answers{" "}
-              <span className="bg-gradient-to-r from-accent-amber to-accent-green bg-clip-text text-transparent">
-                Instantly
-              </span>
-              .
-            </h1>
-
-            <p className="text-lg text-text-muted leading-relaxed mb-10 max-w-lg">
-              Upload PDFs, DOCX, and TXT files. Ask questions in plain English.
-              DocuMind reads, understands, and answers — with source citations every time.
-            </p>
-
-            <div className="flex flex-wrap gap-4">
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-2 bg-accent hover:bg-accent/90 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-xl shadow-accent/25 hover:shadow-accent/40 hover:-translate-y-0.5"
-              >
-                Start for free
-                <ChevronRight className="w-4 h-4" />
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 border border-border hover:border-accent/40 text-text-secondary hover:text-text-primary font-semibold px-6 py-3 rounded-lg transition-all hover:-translate-y-0.5"
-              >
-                Sign in
-              </Link>
-            </div>
-
-            <p className="text-xs text-text-muted mt-5">No credit card required · Free to use</p>
+        <div className="relative max-w-4xl mx-auto w-full flex flex-col items-center text-center">
+          {/* Eyebrow chip */}
+          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-mono text-text-muted tracking-widest uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-green animate-pulse" />
+            AI · Document Intelligence
           </div>
 
-          {/* Right: floating document cards visual */}
-          <div className="relative h-[420px] hidden lg:block">
-            {/* Central glow */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-48 h-48 rounded-full bg-accent/15 blur-[60px]" />
-            </div>
+          {/* Headline */}
+          <h1 className="font-black leading-[0.88] tracking-tighter text-text-primary mb-6"
+            style={{ fontSize: "clamp(3.2rem, 10vw, 6.5rem)" }}>
+            Stop ctrl+F-ing
+            <br />
+            <em className="not-italic bg-gradient-to-br from-indigo-300 via-accent to-violet-500 bg-clip-text text-transparent">
+              your documents.
+            </em>
+          </h1>
 
-            {/* Main document card */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 bg-bg-secondary border border-white/10 rounded-2xl p-5 shadow-2xl z-20 animate-float">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-accent" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-text-primary">research_paper.pdf</p>
-                  <p className="text-xs text-text-muted">42 pages</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="h-2 bg-bg-surface rounded-full w-full" />
-                <div className="h-2 bg-bg-surface rounded-full w-4/5" />
-                <div className="h-2 bg-bg-surface rounded-full w-3/5" />
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/5">
-                <span className="text-xs text-accent-green font-medium flex items-center gap-1.5">
-                  <CheckCircle className="w-3 h-3" /> Ready to query
-                </span>
-              </div>
-            </div>
+          <p className="text-base sm:text-lg text-text-muted max-w-lg leading-relaxed mb-10">
+            Upload PDFs, Word docs, and text files. Ask questions in plain English.
+            Get answers — with exact citations, every time.
+          </p>
 
-            {/* Chat bubble — top right */}
-            <div className="absolute top-10 right-8 w-48 bg-bg-secondary border border-white/10 rounded-2xl p-4 shadow-xl z-10 animate-float-delayed">
-              <div className="flex items-start gap-2.5">
-                <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <MessageSquare className="w-3 h-3 text-accent" />
-                </div>
-                <div>
-                  <p className="text-xs text-text-primary font-medium">What are the key findings?</p>
-                  <p className="text-xs text-text-muted mt-1 leading-relaxed">The study found that...</p>
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <button onClick={() => open("register")}
+              className="cta-primary group inline-flex items-center gap-2 bg-accent hover:bg-indigo-500 text-white font-bold px-7 py-3.5 rounded-xl text-sm transition-all shadow-xl shadow-accent/25 hover:shadow-accent/40 hover:-translate-y-px">
+              Start for free
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+            <button onClick={() => open("login")}
+              className="inline-flex items-center gap-2 text-text-secondary hover:text-text-primary border border-white/10 hover:border-white/20 bg-white/[0.04] hover:bg-white/[0.07] px-7 py-3.5 rounded-xl text-sm font-semibold transition-all hover:-translate-y-px">
+              Sign in
+            </button>
+          </div>
 
-            {/* Upload card — bottom left */}
-            <div className="absolute bottom-12 left-4 w-44 bg-bg-secondary border border-white/10 rounded-2xl p-4 shadow-xl z-10 animate-float-slow">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-accent-amber/20 flex items-center justify-center">
-                  <Upload className="w-4 h-4 text-accent-amber" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-text-primary">Upload complete</p>
-                  <p className="text-xs text-text-muted">contract.docx</p>
-                </div>
+          {/* ── App preview ── */}
+          <div className="mt-16 w-full max-w-2xl mx-auto rounded-2xl overflow-hidden border border-white/10 shadow-[0_32px_80px_rgba(0,0,0,0.6)] bg-[#141927]">
+            {/* Titlebar */}
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-bg-primary/60 border-b border-white/[0.06]">
+              <div className="flex gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-white/10" />
+                <span className="w-2.5 h-2.5 rounded-full bg-white/10" />
+                <span className="w-2.5 h-2.5 rounded-full bg-white/10" />
               </div>
-              <div className="mt-3 h-1.5 bg-bg-surface rounded-full overflow-hidden">
-                <div className="h-full w-full bg-accent-green rounded-full" />
+              <div className="flex gap-1.5 ml-1">
+                {["annual_report.pdf", "contract_v3.docx"].map((f) => (
+                  <span key={f} className="flex items-center gap-1.5 bg-bg-surface/50 text-text-muted text-[11px] font-mono px-2.5 py-1 rounded-md border border-white/[0.06]">
+                    <FileText className="w-3 h-3 text-accent/70" />{f}
+                  </span>
+                ))}
               </div>
             </div>
 
-            {/* Search card — top left */}
-            <div className="absolute top-16 left-2 w-40 bg-bg-secondary border border-white/10 rounded-xl p-3 shadow-xl animate-float-delayed-2">
-              <div className="flex items-center gap-2">
-                <Search className="w-3.5 h-3.5 text-accent-amber shrink-0" />
-                <p className="text-xs text-text-muted">Searching 3 sources…</p>
+            {/* Messages */}
+            <div className="p-5 space-y-5 text-left">
+              <div className="flex gap-3 items-start">
+                <span className="w-6 h-6 rounded-full bg-bg-surface flex items-center justify-center shrink-0 text-[11px] text-text-muted font-bold">U</span>
+                <p className="text-sm text-text-secondary leading-relaxed pt-0.5">
+                  What are the revenue figures for Q3 in the annual report?
+                </p>
+              </div>
+
+              <div className="flex gap-3 items-start">
+                <span className="w-6 h-6 rounded-full bg-accent/15 border border-accent/20 flex items-center justify-center shrink-0 text-[11px] text-accent font-black">D</span>
+                <div className="space-y-2">
+                  <p className="text-sm text-text-primary leading-relaxed">
+                    Q3 total revenue was <span className="text-accent font-semibold">$4.82 billion</span>, up 12% year-over-year, with EBITDA margin expanding to 31.4%.
+                  </p>
+                  <div className="flex items-center gap-1.5 w-fit bg-bg-primary/60 border border-white/[0.07] text-text-muted rounded-lg px-2.5 py-1.5 text-[11px] font-mono">
+                    <FileText className="w-3 h-3 text-accent-amber shrink-0" />
+                    annual_report.pdf · Q3 Results, p.14
+                    <ArrowUpRight className="w-3 h-3 ml-0.5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Input */}
+              <div className="flex items-center gap-3 bg-bg-primary/50 rounded-xl border border-white/[0.07] px-4 py-3">
+                <span className="text-sm text-text-muted font-mono flex-1 opacity-60">Ask anything about your documents…</span>
+                <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center shrink-0 shadow-md shadow-accent/20">
+                  <ArrowRight className="w-3.5 h-3.5 text-white" />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="py-24 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-bold text-text-primary mb-3">Everything you need</h2>
-            <p className="text-text-muted max-w-md mx-auto">A complete toolkit for extracting value from your document library.</p>
-          </div>
+      {/* ── Ticker ────────────────────────────────────────────── */}
+      <div className="border-y border-white/[0.05] py-3.5 overflow-hidden">
+        <div className="ticker-track flex gap-12 text-[11px] font-mono text-text-muted tracking-[0.12em] uppercase whitespace-nowrap">
+          {[1, 2].map((i) => (
+            <span key={i} className="flex gap-12 shrink-0">
+              {["PDF", "DOCX", "TXT", "Instant indexing", "Cited answers", "Streaming AI", "Private & secure", "Multi-workspace"].map((t, j) => (
+                <span key={j} className="flex items-center gap-12">
+                  <span className="hover:text-text-secondary transition-colors cursor-default">{t}</span>
+                  <span className="text-white/10">·</span>
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
+      </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+      {/* ── Features ──────────────────────────────────────────── */}
+      <section className="py-28 px-5">
+        <div className="max-w-4xl mx-auto">
+          <p className="text-[11px] font-mono tracking-[0.15em] uppercase text-accent/60 mb-10">What it does</p>
+          <div className="divide-y divide-white/[0.05]">
             {[
               {
-                icon: <Upload className="w-5 h-5 text-accent" />,
-                bg: "bg-accent/10",
-                title: "Multi-format Upload",
-                desc: "PDF, DOCX, and TXT files processed automatically. Drag, drop, done.",
+                n: "01", col: "text-accent",
+                title: "Upload anything.",
+                body: "PDFs, Word documents, plain text — up to 50 MB per file. Drag, drop, and it's indexed in seconds. No format wrangling required.",
               },
               {
-                icon: <MessageSquare className="w-5 h-5 text-accent-green" />,
-                bg: "bg-accent-green/10",
-                title: "Conversational AI",
-                desc: "Ask follow-up questions naturally. The AI remembers context within each conversation.",
+                n: "02", col: "text-violet-400",
+                title: "Ask in plain English.",
+                body: "No boolean operators. No query syntax. Just type your question the way you'd ask a colleague who's already read everything.",
               },
               {
-                icon: <Search className="w-5 h-5 text-accent-amber" />,
-                bg: "bg-accent-amber/10",
-                title: "Source Citations",
-                desc: "Every answer links to the exact passage it came from. No hallucinations go unchecked.",
+                n: "03", col: "text-accent-green",
+                title: "Sources, always.",
+                body: "Every answer links back to the exact passage — filename, section, page number. No hallucination goes unchecked.",
               },
               {
-                icon: <Zap className="w-5 h-5 text-purple-400" />,
-                bg: "bg-purple-400/10",
-                title: "Instant Answers",
-                desc: "Streaming responses so you see results as they're generated — no waiting.",
-              },
-              {
-                icon: <Shield className="w-5 h-5 text-accent-red" />,
-                bg: "bg-accent-red/10",
-                title: "Private & Secure",
-                desc: "Your documents are scoped to your account. Nobody else can access your data.",
-              },
-              {
-                icon: <FileText className="w-5 h-5 text-accent" />,
-                bg: "bg-accent/10",
-                title: "Workspace Organisation",
-                desc: "Group documents into workspaces for different projects or clients.",
+                n: "04", col: "text-accent-amber",
+                title: "Conversations, not queries.",
+                body: "Ask follow-ups. Dig deeper. The AI holds context within each conversation and refines answers as you probe.",
               },
             ].map((f) => (
-              <div
-                key={f.title}
-                className="bg-bg-secondary border border-white/5 rounded-2xl p-6 hover:border-accent/20 transition-colors group"
-              >
-                <div className={`w-10 h-10 rounded-xl ${f.bg} flex items-center justify-center mb-4`}>
-                  {f.icon}
+              <div key={f.n} className="group -mx-5 px-5 py-10 flex gap-8 sm:gap-12 items-start hover:bg-white/[0.015] transition-colors cursor-default">
+                <span className={`feature-num font-black font-mono leading-none shrink-0 w-10 ${f.col} opacity-20 group-hover:opacity-50 transition-opacity`}
+                  style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)" }}>
+                  {f.n}
+                </span>
+                <div>
+                  <h3 className="font-bold text-text-primary mb-2 tracking-tight"
+                    style={{ fontSize: "clamp(1.2rem, 3vw, 1.6rem)" }}>
+                    {f.title}
+                  </h3>
+                  <p className="text-text-muted leading-relaxed max-w-lg text-[15px]">{f.body}</p>
                 </div>
-                <h3 className="font-semibold text-text-primary mb-2">{f.title}</h3>
-                <p className="text-sm text-text-muted leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── How it works ── */}
-      <section id="how-it-works" className="py-24 px-6 relative">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-accent/5 blur-[100px]" />
-        </div>
-
-        <div className="relative max-w-4xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-bold text-text-primary mb-3">Up and running in minutes</h2>
-            <p className="text-text-muted">Three steps is all it takes.</p>
-          </div>
-
-          <div className="relative">
-            {/* Connector line */}
-            <div className="hidden md:block absolute top-10 left-[calc(16.67%+20px)] right-[calc(16.67%+20px)] h-px bg-gradient-to-r from-accent/30 via-accent/60 to-accent/30" />
-
-            <div className="grid md:grid-cols-3 gap-8 relative">
-              {[
-                {
-                  step: "01",
-                  title: "Create a workspace",
-                  desc: "Sign up free and create a workspace to organise your documents.",
-                  color: "text-accent",
-                  border: "border-accent/30",
-                  bg: "bg-accent/10",
-                },
-                {
-                  step: "02",
-                  title: "Upload your documents",
-                  desc: "Drag and drop PDFs, Word docs, or text files. We handle the rest.",
-                  color: "text-accent-amber",
-                  border: "border-accent-amber/30",
-                  bg: "bg-accent-amber/10",
-                },
-                {
-                  step: "03",
-                  title: "Ask anything",
-                  desc: "Start a conversation. Get cited, accurate answers in seconds.",
-                  color: "text-accent-green",
-                  border: "border-accent-green/30",
-                  bg: "bg-accent-green/10",
-                },
-              ].map((s) => (
-                <div key={s.step} className="flex flex-col items-center text-center">
-                  <div className={`w-12 h-12 rounded-full ${s.bg} border ${s.border} flex items-center justify-center mb-5 relative z-10`}>
-                    <span className={`text-sm font-bold ${s.color}`}>{s.step}</span>
-                  </div>
-                  <h3 className="font-semibold text-text-primary mb-2">{s.title}</h3>
-                  <p className="text-sm text-text-muted leading-relaxed">{s.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Bottom CTA ── */}
-      <section className="py-24 px-6">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="bg-bg-secondary border border-white/5 rounded-3xl px-10 py-14 relative overflow-hidden">
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-accent/10 rounded-full blur-[80px]" />
-            </div>
+      {/* ── Final CTA ─────────────────────────────────────────── */}
+      <section className="py-20 px-5">
+        <div className="max-w-2xl mx-auto">
+          <div className="relative rounded-3xl border border-white/[0.08] overflow-hidden text-center px-10 py-16 bg-[#141927]">
+            <div className="pointer-events-none absolute inset-0"
+              style={{ background: "radial-gradient(ellipse at 50% -20%, rgba(99,102,241,0.18) 0%, transparent 70%)" }} />
             <div className="relative">
-              <h2 className="text-3xl font-bold text-text-primary mb-3">
-                Ready to unlock your documents?
+              <h2 className="font-black tracking-tighter text-text-primary mb-3"
+                style={{ fontSize: "clamp(1.8rem, 5vw, 2.8rem)" }}>
+                Your documents are waiting.
               </h2>
-              <p className="text-text-muted mb-8">
-                Join DocuMind and turn static files into interactive knowledge — for free.
+              <p className="text-text-muted mb-8 max-w-sm mx-auto text-[15px] leading-relaxed">
+                Free to use. No credit card. Start chatting with your files in under a minute.
               </p>
-              <div className="flex flex-wrap gap-4 justify-center">
-                <Link
-                  href="/register"
-                  className="inline-flex items-center gap-2 bg-accent hover:bg-accent/90 text-white font-semibold px-8 py-3 rounded-lg transition-all shadow-xl shadow-accent/25 hover:shadow-accent/40 hover:-translate-y-0.5"
-                >
-                  Get started free
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 border border-border hover:border-accent/40 text-text-secondary hover:text-text-primary font-semibold px-8 py-3 rounded-lg transition-all hover:-translate-y-0.5"
-                >
-                  Sign in
-                </Link>
-              </div>
+              <button onClick={() => open("register")}
+                className="inline-flex items-center gap-2 bg-accent hover:bg-indigo-500 text-white font-bold px-9 py-3.5 rounded-xl text-sm transition-all shadow-xl shadow-accent/30 hover:-translate-y-px group">
+                Get started — it's free
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-white/5 py-8 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* ── Footer ────────────────────────────────────────────── */}
+      <footer className="border-t border-white/[0.05] py-5 px-5">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-              <span className="text-white text-xs font-bold">D</span>
+            <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center">
+              <span className="text-white text-[9px] font-black">D</span>
             </div>
-            <span className="text-sm font-semibold text-text-primary">DocuMind</span>
+            <span className="text-xs font-semibold text-text-muted">DocuMind</span>
           </div>
-          <p className="text-xs text-text-muted">© 2026 DocuMind. Your documents. Answered.</p>
+          <p className="text-xs text-text-muted">© 2026 · Your documents. Answered.</p>
         </div>
       </footer>
 
       <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
-          50% { transform: translate(-50%, -50%) translateY(-12px); }
+        /* Ambient blobs */
+        .blob {
+          position: absolute;
+          border-radius: 9999px;
+          filter: blur(100px);
+          pointer-events: none;
         }
-        @keyframes float-plain {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
+        .blob-1 {
+          width: 560px; height: 560px;
+          background: radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%);
+          top: 15%; left: 5%;
+          animation: driftA 16s ease-in-out infinite;
         }
-        @keyframes float-plain-slow {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-7px); }
+        .blob-2 {
+          width: 480px; height: 480px;
+          background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
+          top: 30%; right: 0%;
+          animation: driftB 20s ease-in-out infinite;
         }
-        .animate-float {
-          animation: float 4s ease-in-out infinite;
+        .blob-3 {
+          width: 400px; height: 400px;
+          background: radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 70%);
+          bottom: 5%; left: 35%;
+          animation: driftA 24s ease-in-out 4s infinite;
         }
-        .animate-float-delayed {
-          animation: float-plain 4s ease-in-out 1s infinite;
+        @keyframes driftA {
+          0%,100% { transform: translate(0,0) scale(1); }
+          50% { transform: translate(40px,-30px) scale(1.08); }
         }
-        .animate-float-delayed-2 {
-          animation: float-plain 5s ease-in-out 0.5s infinite;
+        @keyframes driftB {
+          0%,100% { transform: translate(0,0) scale(1); }
+          50% { transform: translate(-50px, 20px) scale(1.05); }
         }
-        .animate-float-slow {
-          animation: float-plain-slow 6s ease-in-out 2s infinite;
+
+        /* Ticker */
+        .ticker-track { animation: ticker 22s linear infinite; }
+        @keyframes ticker {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
         }
+
+        /* Modal */
+        @keyframes modal-appear {
+          from { opacity:0; transform: scale(0.96) translateY(10px); }
+          to   { opacity:1; transform: scale(1)    translateY(0); }
+        }
+        .modal-appear { animation: modal-appear 0.22s cubic-bezier(0.16,1,0.3,1) both; }
+
+        /* Auth input */
+        :global(.auth-input) {
+          width: 100%;
+          background: #0F172A;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          padding: 10px 12px;
+          font-size: 13px;
+          color: #F1F5F9;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        :global(.auth-input::placeholder) { color: #475569; }
+        :global(.auth-input:focus) { border-color: rgba(99,102,241,0.5); }
       `}</style>
     </div>
   );
