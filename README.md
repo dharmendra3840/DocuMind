@@ -22,6 +22,33 @@ Knowledge is buried inside documents. A 300-page legal contract, 30 research pap
 
 ---
 
+## Why DocuMind — Not Just Another Chat Tool
+
+You might ask: *ChatGPT can read documents too. Why build this?*
+
+The difference is fundamental, not cosmetic.
+
+**General AI assistants are stateless and ungrounded.** When you paste a document into ChatGPT, it reads it once within a single session context window, has no memory of it next session, and — critically — can hallucinate facts that were never in your document at all. There is no mechanism to verify where an answer came from.
+
+DocuMind is architected around the opposite guarantee:
+
+| Capability | Generic AI Chat (ChatGPT, Claude.ai) | DocuMind |
+|---|---|---|
+| Document memory | Lost after session ends | Persisted in vector DB — queryable forever |
+| Context window limit | ~128K tokens — fails on large corpora | Chunks + retrieves only what's relevant, scales to thousands of pages |
+| Answer grounding | Model may use outside knowledge | Strictly answers from your documents only |
+| Source citations | Occasionally mentions sources | Every fact cited with exact filename and page number |
+| Multi-document synthesis | Possible but unstructured | Workspace-scoped retrieval across all uploaded docs simultaneously |
+| Data privacy | Your documents sent to a shared cloud UI | Your data stays in your own storage (S3) and your own vector index |
+| Workspace organisation | None | Named workspaces — isolate Legal, Research, or Product docs separately |
+| Integration | None | REST API — embed into your own product or support portal |
+
+**The core architectural difference is RAG vs. prompt stuffing.** Tools like ChatGPT's file upload work by cramming the document into the prompt context. This breaks on anything longer than ~100 pages, loses precision as the document grows, and disappears the moment the session ends. DocuMind's ingestion pipeline converts every document into a permanent, searchable index of embeddings. Every query retrieves only the most semantically relevant chunks — so a 500-page report answers just as precisely as a 5-page one, and it's still queryable six months later.
+
+**Source transparency is a first-class feature, not an afterthought.** In a legal, academic, or enterprise context, an answer without a verifiable source is a liability. DocuMind enforces citations at the prompt level — the model is instructed it *cannot* answer without citing the exact page it drew from. Users can inspect the raw chunk that produced any part of the answer.
+
+---
+
 ## Who It's For
 
 **Students** — Upload all your lecture PDFs into a workspace and ask exam-style questions across them simultaneously.
