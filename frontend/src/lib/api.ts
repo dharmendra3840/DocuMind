@@ -4,7 +4,7 @@ import type {
   Chunk, Conversation, Message, Source
 } from "@/types/api";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 class ApiClient {
   private client: AxiosInstance;
