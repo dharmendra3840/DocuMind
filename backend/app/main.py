@@ -17,17 +17,9 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
     logger.info("Starting DocuMind API")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Pre-warm embedding model so first query doesn't stall
-    try:
-        from app.services.embedder import get_embedding_model
-        await asyncio.to_thread(get_embedding_model)
-        logger.info("embedding_model_ready")
-    except Exception as e:
-        logger.warning("embedding_model_warmup_failed", error=str(e))
     yield
     logger.info("Shutting down DocuMind API")
     await engine.dispose()

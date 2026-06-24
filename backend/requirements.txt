@@ -13,12 +13,9 @@ python-jose[cryptography]==3.3.0
 bcrypt==5.0.0
 python-multipart==0.0.9
 
-# LangChain & AI
-langchain==0.2.1
-langchain-community==0.2.1
+# AI
 openai>=1.30.0
-sentence-transformers==3.0.1
-tiktoken==0.7.0
+fastembed==0.3.6
 
 # Vector stores
 chromadb==0.5.0
