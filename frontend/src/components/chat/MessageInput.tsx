@@ -16,9 +16,16 @@ export function MessageInput({ onSend, onStop, disabled, isStreaming }: MessageI
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-  });
+    const resize = () => {
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
+    };
+    // initial resize
+    resize();
+    // resize on user input only
+    ta.addEventListener("input", resize);
+    return () => ta.removeEventListener("input", resize);
+  }, []);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
