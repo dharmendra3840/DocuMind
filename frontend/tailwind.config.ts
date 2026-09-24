@@ -13,7 +13,6 @@ const config: Config = {
         "bg-primary": "#0F172A",
         "bg-secondary": "#1E293B",
         "bg-surface": "#334155",
-        "bg-elevated": "#141927",
         accent: "#6366F1",
         "accent-green": "#10B981",
         "accent-amber": "#F59E0B",
@@ -22,10 +21,19 @@ const config: Config = {
         "text-secondary": "#CBD5E1",
         "text-muted": "#94A3B8",
         border: "#334155",
+        // Landing page — "paper & ink" palette
+        paper: { DEFAULT: "#F7F5F0", deep: "#EFEBE2" },
+        ink: { DEFAULT: "#16181D", soft: "#3B3E46", muted: "#65686F" },
+        rule: "#E3DED3",
+        marker: "#FBE38E",
+        redline: "#C23E1C",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "monospace"],
+        serif: ["var(--font-serif)", "Georgia", "serif"],
+        plex: ["var(--font-plex)", "system-ui", "sans-serif"],
+        "plex-mono": ["var(--font-plex-mono)", "ui-monospace", "monospace"],
       },
       borderRadius: {
         DEFAULT: "8px",

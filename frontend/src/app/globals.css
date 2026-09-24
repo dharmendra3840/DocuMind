@@ -38,82 +38,55 @@ html[data-authed] .landing-root {
   visibility: hidden;
 }
 
-.blob {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(100px);
-  pointer-events: none;
+/* The landing page is light; keep overscroll and the scrollbar on-palette. */
+body:has(.landing-root) {
+  background: theme("colors.paper.DEFAULT");
 }
-.blob-1 {
-  width: 560px; height: 560px;
-  background: radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%);
-  top: 15%; left: 5%;
-  animation: blob-drift-a 16s ease-in-out infinite;
+html:has(.landing-root) ::-webkit-scrollbar-track {
+  background: theme("colors.paper.DEFAULT");
 }
-.blob-2 {
-  width: 480px; height: 480px;
-  background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
-  top: 30%; right: 0%;
-  animation: blob-drift-b 20s ease-in-out infinite;
-}
-.blob-3 {
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 70%);
-  bottom: 5%; left: 35%;
-  animation: blob-drift-a 24s ease-in-out 4s infinite;
-}
-@keyframes blob-drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, -30px) scale(1.08); }
-}
-@keyframes blob-drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-50px, 20px) scale(1.05); }
+html:has(.landing-root) ::-webkit-scrollbar-thumb {
+  background: #d6d0c3;
 }
 
-/* Both halves of the track are identical and each carries its own trailing
-   gap (padding-right), so shifting by exactly -50% loops without a jump. */
-.ticker-track {
-  animation: ticker 28s linear infinite;
-}
-@keyframes ticker {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+/* Highlighter stroke across the lower part of the text. */
+.marker-underline {
+  background-image: linear-gradient(transparent 60%, theme("colors.marker") 60%, theme("colors.marker") 90%, transparent 90%);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 @keyframes modal-appear {
-  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  from { opacity: 0; transform: scale(0.97) translateY(8px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .modal-appear {
-  animation: modal-appear 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: modal-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .auth-input {
   width: 100%;
-  background: theme("colors.bg-primary");
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #fff;
+  border: 1px solid theme("colors.rule");
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
-  color: theme("colors.text-primary");
+  color: theme("colors.ink.DEFAULT");
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .auth-input::placeholder {
-  color: #64748b;
+  color: #9a9ca2;
 }
 .auth-input:focus {
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  border-color: theme("colors.ink.DEFAULT");
+  box-shadow: 0 0 0 3px rgba(22, 24, 29, 0.08);
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .blob,
-  .ticker-track,
   .modal-appear {
     animation: none;
   }
