@@ -16,7 +16,7 @@ function Callback() {
     const authError = searchParams.get("auth_error");
 
     if (authError) {
-      router.replace("/");
+      router.replace(`/?auth_error=${encodeURIComponent(authError)}`);
       return;
     }
 

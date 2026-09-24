@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,6 +5,10 @@
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-bg-primary text-text-primary font-sans antialiased;
@@ -25,5 +27,94 @@
 @layer utilities {
   .bg-noise {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+}
+
+/* ── Landing page ──────────────────────────────────────────────────────────── */
+
+/* Set by the inline script in layout.tsx when a signed-in user lands on "/",
+   so the marketing page doesn't flash before the redirect to /chat. */
+html[data-authed] .landing-root {
+  visibility: hidden;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  pointer-events: none;
+}
+.blob-1 {
+  width: 560px; height: 560px;
+  background: radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%);
+  top: 15%; left: 5%;
+  animation: blob-drift-a 16s ease-in-out infinite;
+}
+.blob-2 {
+  width: 480px; height: 480px;
+  background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
+  top: 30%; right: 0%;
+  animation: blob-drift-b 20s ease-in-out infinite;
+}
+.blob-3 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 70%);
+  bottom: 5%; left: 35%;
+  animation: blob-drift-a 24s ease-in-out 4s infinite;
+}
+@keyframes blob-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, -30px) scale(1.08); }
+}
+@keyframes blob-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-50px, 20px) scale(1.05); }
+}
+
+/* Both halves of the track are identical and each carries its own trailing
+   gap (padding-right), so shifting by exactly -50% loops without a jump. */
+.ticker-track {
+  animation: ticker 28s linear infinite;
+}
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes modal-appear {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-appear {
+  animation: modal-appear 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-input {
+  width: 100%;
+  background: theme("colors.bg-primary");
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: theme("colors.text-primary");
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-input::placeholder {
+  color: #64748b;
+}
+.auth-input:focus {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .blob,
+  .ticker-track,
+  .modal-appear {
+    animation: none;
   }
 }

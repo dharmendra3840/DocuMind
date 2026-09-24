@@ -13,6 +13,7 @@ const config: Config = {
         "bg-primary": "#0F172A",
         "bg-secondary": "#1E293B",
         "bg-surface": "#334155",
+        "bg-elevated": "#141927",
         accent: "#6366F1",
         "accent-green": "#10B981",
         "accent-amber": "#F59E0B",
@@ -23,8 +24,8 @@ const config: Config = {
         border: "#334155",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "monospace"],
       },
       borderRadius: {
         DEFAULT: "8px",

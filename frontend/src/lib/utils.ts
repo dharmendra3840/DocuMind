@@ -5,6 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// FastAPI returns `detail` as a string for HTTPExceptions but as a list of
+// { msg, loc } objects for 422 validation errors — never render it raw.
+export function getErrorMessage(err: unknown, fallback: string): string {
+  const e = err as { request?: unknown; response?: { data?: { detail?: unknown } } } | null;
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String(d.msg).replace(/^Value error, /, "") : null))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join(". ");
+  }
+  if (e?.request && !e.response) return "Can't reach the server. Check your connection and try again.";
+  return fallback;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
