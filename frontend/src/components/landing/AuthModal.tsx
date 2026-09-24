@@ -71,7 +71,6 @@ export function AuthModal({
       const data = mode === "login"
         ? await apiClient.login(email, password)
         : await apiClient.register(email, password, name.trim() || undefined);
-      localStorage.setItem("refresh_token", data.refresh_token);
       // AuthModalProvider redirects to /chat as soon as `user` is set, so the
       // spinner stays on until the navigation happens.
       setAuth(data.user, data.access_token, data.refresh_token);

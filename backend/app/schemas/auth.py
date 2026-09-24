@@ -31,8 +31,11 @@ class TokenResponse(BaseModel):
     user: UserOut
 
 
-class AccessTokenResponse(BaseModel):
+class RefreshResponse(BaseModel):
+    # Refresh tokens are single-use (rotated on every refresh), so the client
+    # must replace its stored refresh token with this one.
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 

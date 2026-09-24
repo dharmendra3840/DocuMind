@@ -117,10 +117,15 @@ export function Sidebar() {
   };
 
   const handleLogout = async () => {
-    const refreshToken = localStorage.getItem("refresh_token") ?? "";
-    await apiClient.logout(refreshToken);
-    clearAuth();
-    router.push("/");
+    const { refreshToken } = useAppStore.getState();
+    try {
+      if (refreshToken) await apiClient.logout(refreshToken);
+    } catch {
+      // Revoking the token server-side is best effort; always sign out locally.
+    } finally {
+      clearAuth();
+      router.replace("/");
+    }
   };
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);

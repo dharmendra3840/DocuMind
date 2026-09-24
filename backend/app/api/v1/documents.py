@@ -1,4 +1,5 @@
 import uuid
+from pathlib import PurePosixPath
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -55,7 +56,9 @@ async def upload_document(
     if file.size and file.size > settings.max_upload_size_bytes:
         raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_size_mb}MB limit")
 
-    file_type = _get_file_type(file.filename or "file.txt", file.content_type or "")
+    # Browsers send a bare name, but a crafted request can include path parts.
+    display_name = PurePosixPath((file.filename or "").replace("\\", "/")).name[:255] or "document"
+    file_type = _get_file_type(display_name, file.content_type or "")
     file_bytes = await file.read()
 
     if len(file_bytes) > settings.max_upload_size_bytes:
@@ -63,7 +66,7 @@ async def upload_document(
 
     doc = Document(
         workspace_id=workspace.id,
-        filename=file.filename or "document",
+        filename=display_name,
         file_type=FileType(file_type),
         file_size_bytes=len(file_bytes),
         status=DocumentStatus.UPLOADING,

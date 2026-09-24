@@ -1,3 +1,4 @@
+import uuid
 import hashlib
 import base64
 import bcrypt
@@ -27,7 +28,9 @@ def create_access_token(subject: str) -> str:
 
 def create_refresh_token(subject: str) -> tuple[str, datetime]:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days)
-    token = jwt.encode({"sub": subject, "exp": expire, "type": "refresh"}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    # jti keeps tokens unique (the column is UNIQUE) even when two are issued
+    # for the same user within the same second.
+    token = jwt.encode({"sub": subject, "exp": expire, "type": "refresh", "jti": uuid.uuid4().hex}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return token, expire
 
 

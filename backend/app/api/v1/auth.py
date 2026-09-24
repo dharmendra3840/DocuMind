@@ -9,7 +9,7 @@ from app.db.models.workspace import Workspace
 from app.db.models.refresh_token import RefreshToken
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.exceptions import CredentialsException, ConflictException
-from app.schemas.auth import UserRegister, UserLogin, TokenResponse, AccessTokenResponse, RefreshTokenRequest, UserOut
+from app.schemas.auth import UserRegister, UserLogin, TokenResponse, RefreshResponse, RefreshTokenRequest, UserOut
 from app.api.v1.deps import get_current_user
 from jose import JWTError
 
@@ -55,7 +55,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     return TokenResponse(access_token=access_token, refresh_token=refresh_token_str, user=UserOut.model_validate(user))
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
+@router.post("/refresh", response_model=RefreshResponse)
 async def refresh(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     try:
         payload = decode_token(data.refresh_token)
@@ -78,7 +78,7 @@ async def refresh(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db))
     db.add(RefreshToken(user_id=token_record.user_id, token=new_refresh_str, expires_at=new_expires))
     await db.commit()
 
-    return AccessTokenResponse(access_token=new_access)
+    return RefreshResponse(access_token=new_access, refresh_token=new_refresh_str)
 
 
 @router.get("/me", response_model=UserOut)

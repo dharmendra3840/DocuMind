@@ -82,9 +82,28 @@ export const useAppStore = create<AppState>()(
       onRehydrateStorage: () => (state) => {
         if (state?.accessToken) {
           apiClient.setAccessToken(state.accessToken);
+        } else {
+          apiClient.clearTokens();
         }
         state?.setHydrated(true);
       },
     }
   )
 );
+
+// The persisted store is the single source of truth for tokens.
+apiClient.configureAuth({
+  getRefreshToken: () => useAppStore.getState().refreshToken,
+  onTokensRefreshed: (accessToken, refreshToken) => useAppStore.setState({ accessToken, refreshToken }),
+  // Clearing `user` makes AppLayout redirect to "/", and the landing page stays
+  // put because no user is left to bounce back to /chat.
+  onAuthLost: () => useAppStore.getState().clearAuth(),
+});
+
+// Another tab may rotate the refresh token or sign out; pick that up so this
+// tab doesn't keep using a revoked token.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === "documind-store") useAppStore.persist.rehydrate();
+  });
+}

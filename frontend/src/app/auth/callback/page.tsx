@@ -2,7 +2,6 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/appStore";
-import { apiClient } from "@/lib/api";
 
 function Callback() {
   const router = useRouter();
@@ -25,8 +24,6 @@ function Callback() {
         // Restore stripped base64 padding
         const padded = userB64 + "==".slice(0, (4 - (userB64.length % 4)) % 4);
         const user = JSON.parse(atob(padded.replace(/-/g, "+").replace(/_/g, "/")));
-        localStorage.setItem("refresh_token", refresh);
-        apiClient.setAccessToken(token);
         setAuth(user, token, refresh);
         router.replace("/chat");
       } catch {

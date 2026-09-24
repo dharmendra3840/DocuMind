@@ -4,9 +4,9 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.db.models.user import User
 from app.db.models.workspace import Workspace
 from app.db.models.conversation import Conversation, Message, MessageRole
@@ -17,8 +17,14 @@ from app.schemas.conversation import (
     MessageOut, MessageListResponse, QueryRequest, FeedbackRequest
 )
 from app.services.query import stream_rag_response, generate_conversation_title
+from app.utils.logger import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
+
+# Titles the frontend/backend assign before the first exchange; replaced by an
+# LLM-generated title once the first answer is in.
+PLACEHOLDER_TITLES = {None, "", "New Conversation"}
 
 
 async def _get_workspace_or_403(workspace_id: uuid.UUID, user: User, db: AsyncSession) -> Workspace:
@@ -120,7 +126,7 @@ async def query_conversation(
         try:
             async for event in stream_rag_response(str(workspace.id), data.message, history, data.include_sources, data.doc_ids):
                 yield event
-                parsed = json.loads(event.replace("data: ", "").strip())
+                parsed = json.loads(event.removeprefix("data: ").strip())
                 if parsed["type"] == "token":
                     full_response += parsed["content"]
                 elif parsed["type"] == "sources":
@@ -128,30 +134,43 @@ async def query_conversation(
                 elif parsed["type"] == "done":
                     latency_ms = parsed.get("latency_ms", int((time.time() - start) * 1000))
         except Exception as e:
+            logger.exception("query_stream_failed", conversation_id=str(conv_id))
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 
-        assistant_msg = Message(
-            conversation_id=conv_id,
-            role=MessageRole.assistant,
-            content=full_response,
-            sources=sources if sources else None,
-            latency_ms=latency_ms,
-            model="llama-3.3-70b-versatile",
-        )
-        db.add(assistant_msg)
-        conv.message_count = (conv.message_count or 0) + 2
+        # The request-scoped `db` session is already closed by the time the
+        # response body streams, so persist with a session of our own.
+        async with AsyncSessionLocal() as session:
+            assistant_msg = Message(
+                conversation_id=conv_id,
+                role=MessageRole.assistant,
+                content=full_response,
+                sources=sources if sources else None,
+                latency_ms=latency_ms,
+                model="llama-3.3-70b-versatile",
+            )
+            session.add(assistant_msg)
+            conv_row = await session.get(Conversation, conv_id)
+            needs_title = False
+            if conv_row is not None:
+                needs_title = (conv_row.message_count or 0) == 0 and conv_row.title in PLACEHOLDER_TITLES
+                conv_row.message_count = (conv_row.message_count or 0) + 2
+            await session.commit()
+            message_id = assistant_msg.id
 
-        if conv.message_count == 2 and full_response:
+        yield f"data: {json.dumps({'type': 'message_saved', 'message_id': str(message_id)})}\n\n"
+
+        # Name the conversation after its first exchange only; done after
+        # message_saved so the answer isn't held up by a second LLM call.
+        if needs_title and full_response:
             try:
-                title = await generate_conversation_title(data.message, full_response)
-                conv.title = title
+                title = (await generate_conversation_title(data.message, full_response)).strip()[:255]
+                if title:
+                    async with AsyncSessionLocal() as session:
+                        await session.execute(update(Conversation).where(Conversation.id == conv_id).values(title=title))
+                        await session.commit()
             except Exception:
-                pass
-
-        await db.commit()
-        await db.refresh(assistant_msg)
-        yield f"data: {json.dumps({'type': 'message_saved', 'message_id': str(assistant_msg.id)})}\n\n"
+                logger.warning("conversation_title_failed", conversation_id=str(conv_id))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

@@ -50,15 +50,23 @@ export function useChat(convId: string | null) {
       abortRef.current = controller;
 
       try {
-        const response = await fetch(apiClient.getQueryUrl(convId), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: apiClient.getAuthHeader(),
-          },
-          body: JSON.stringify({ message: text, include_sources: includeSources, doc_ids: docIds?.length ? docIds : null }),
-          signal: controller.signal,
-        });
+        const send = (authorization: string) =>
+          fetch(apiClient.getQueryUrl(convId), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authorization,
+            },
+            body: JSON.stringify({ message: text, include_sources: includeSources, doc_ids: docIds?.length ? docIds : null }),
+            signal: controller.signal,
+          });
+
+        // fetch bypasses the axios refresh interceptor, and access tokens only
+        // last 15 minutes — refresh once and retry instead of failing.
+        let response = await send(apiClient.getAuthHeader());
+        if (response.status === 401) {
+          response = await send(`Bearer ${await apiClient.refreshAccessToken()}`);
+        }
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 

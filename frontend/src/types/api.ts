@@ -13,6 +13,12 @@ export interface TokenResponse {
   user: User;
 }
 
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token?: string; // absent from backends that don't rotate refresh tokens
+  token_type: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;

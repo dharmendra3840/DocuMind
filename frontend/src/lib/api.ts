@@ -1,14 +1,26 @@
-import axios, { AxiosInstance, AxiosError } from "axios";
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 import type {
-  TokenResponse, User, Workspace, Document, DocumentStatusResponse,
+  TokenResponse, RefreshResponse, User, Workspace, Document, DocumentStatusResponse,
   Chunk, Conversation, Message, Source
 } from "@/types/api";
 
-export const BASE_URL =(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+// Wired up by the app store (see store/appStore.ts) so the client can read and
+// update tokens without importing the store (which imports this module).
+interface AuthHooks {
+  getRefreshToken: () => string | null;
+  onTokensRefreshed: (accessToken: string, refreshToken: string) => void;
+  onAuthLost: () => void;
+}
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 class ApiClient {
   private client: AxiosInstance;
   private accessToken: string | null = null;
+  private hooks: AuthHooks | null = null;
+  private refreshInFlight: Promise<string> | null = null;
 
   constructor() {
     this.client = axios.create({ baseURL: `${BASE_URL}/api/v1`, withCredentials: false });
@@ -20,31 +32,34 @@ class ApiClient {
       return config;
     });
 
+    // On 401, refresh once and replay the request. Auth endpoints are excluded:
+    // a 401 from /auth/login means wrong credentials, not an expired session.
     this.client.interceptors.response.use(
       (r) => r,
       async (error: AxiosError) => {
-        if (error.response?.status === 401 && typeof window !== "undefined") {
-          const refreshToken = localStorage.getItem("refresh_token");
-          if (refreshToken) {
-            try {
-              const res = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, { refresh_token: refreshToken });
-              this.setAccessToken(res.data.access_token);
-              if (error.config) {
-                error.config.headers.Authorization = `Bearer ${res.data.access_token}`;
-                return this.client.request(error.config);
-              }
-            } catch {
-              this.clearTokens();
-              window.location.href = "/";
-            }
-          } else {
-            this.clearTokens();
-            window.location.href = "/";
-          }
+        const original = error.config as RetriableConfig | undefined;
+        if (error.response?.status !== 401 || !original || original._retried || original.url?.startsWith("/auth/")) {
+          return Promise.reject(error);
         }
-        return Promise.reject(error);
+        original._retried = true;
+        try {
+          // If another request already refreshed while this one was in flight,
+          // just replay it with the new token instead of refreshing again.
+          const current = this.accessToken ? `Bearer ${this.accessToken}` : null;
+          const token = current && original.headers.Authorization !== current
+            ? this.accessToken!
+            : await this.refreshAccessToken();
+          original.headers.Authorization = `Bearer ${token}`;
+          return this.client.request(original);
+        } catch {
+          return Promise.reject(error);
+        }
       }
     );
+  }
+
+  configureAuth(hooks: AuthHooks) {
+    this.hooks = hooks;
   }
 
   setAccessToken(token: string) {
@@ -54,8 +69,42 @@ class ApiClient {
   clearTokens() {
     this.accessToken = null;
     if (typeof window !== "undefined") {
+      // Legacy keys from before tokens lived only in the persisted store.
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("user");
+    }
+  }
+
+  /**
+   * Swap the refresh token for a new token pair. Concurrent callers share one
+   * request — refresh tokens are single-use, so parallel refreshes would
+   * invalidate each other. Signs the user out if the refresh token is rejected.
+   */
+  refreshAccessToken(): Promise<string> {
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.doRefresh().finally(() => { this.refreshInFlight = null; });
+    }
+    return this.refreshInFlight;
+  }
+
+  private async doRefresh(): Promise<string> {
+    const refreshToken = this.hooks?.getRefreshToken();
+    if (!refreshToken) {
+      this.hooks?.onAuthLost();
+      throw new Error("Not signed in");
+    }
+    try {
+      const { data } = await axios.post<RefreshResponse>(`${BASE_URL}/api/v1/auth/refresh`, { refresh_token: refreshToken });
+      this.accessToken = data.access_token;
+      // Older backends don't rotate and omit refresh_token; keep the current one then.
+      this.hooks?.onTokensRefreshed(data.access_token, data.refresh_token ?? refreshToken);
+      return data.access_token;
+    } catch (err) {
+      // Only a rejected token ends the session; a network blip shouldn't sign the user out.
+      if (axios.isAxiosError(err) && (err.response?.status === 401 || err.response?.status === 403)) {
+        this.hooks?.onAuthLost();
+      }
+      throw err;
     }
   }
 
