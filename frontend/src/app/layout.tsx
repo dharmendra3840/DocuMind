@@ -12,6 +12,9 @@ const description = "AI-powered document assistant. Upload PDFs, DOCX, and TXT f
 export const metadata: Metadata = {
   title: { default: title, template: "%s · DocuMind" },
   description,
+  // Served from /public rather than app/icon.svg: Vercel's build cache kept
+  // serving a stale /icon.svg after the logo changed.
+  icons: { icon: [{ url: "/documind-mark.svg", type: "image/svg+xml" }] },
   openGraph: { title, description, siteName: "DocuMind", type: "website" },
   twitter: { card: "summary", title, description },
 };
