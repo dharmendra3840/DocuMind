@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 
 class Settings(BaseSettings):
@@ -29,7 +30,16 @@ class Settings(BaseSettings):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        return url
+
+        # Hosted Postgres URLs (Neon, Supabase, Render) carry libpq options that
+        # asyncpg rejects: translate sslmode to asyncpg's `ssl`, drop channel_binding.
+        parts = urlsplit(url)
+        query = dict(parse_qsl(parts.query))
+        query.pop("channel_binding", None)
+        sslmode = query.pop("sslmode", None)
+        if sslmode and "ssl" not in query:
+            query["ssl"] = sslmode
+        return urlunsplit(parts._replace(query=urlencode(query)))
 
     # Redis
     redis_url: str = "redis://localhost:6379"
