@@ -149,8 +149,9 @@ export function useChat(convId: string | null) {
         // Wait for the saved history before dropping the local copies, so the
         // answer doesn't blink out and back in.
         await qc.invalidateQueries({ queryKey: ["messages", convId] });
-        // The server saved the question either way; keep only an unsaved answer.
-        setPending((prev) => (failed || stopped ? prev.filter((m) => m.role === "assistant") : []));
+        // A failed answer: the server drops the question too, so keep both on screen.
+        // A stopped answer: the question is saved (it's in history); keep the partial answer.
+        setPending((prev) => (failed ? prev : stopped ? prev.filter((m) => m.role === "assistant") : []));
       }
     },
     [convId, qc]

@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useMemo, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ThumbsUp, ThumbsDown, Copy, Trash2, Check, FileText, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,35 @@ interface MessageBubbleProps {
   onFeedback?: (id: string, rating: "up" | "down") => void;
   onSourceClick?: (source: Source) => void;
   onDelete?: (id: string) => void;
+}
+
+// [3], [1, 2], and gpt-oss style [3†L4-L9] — but not real links like [1](url).
+const CITATION_RE = /\[(\d{1,2}(?:\s*,\s*\d{1,2})*)(?:†[^\]]*)?\](?!\()/g;
+
+const BOLD_CITATION_RE = /\*\*\s*((?:\[\d{1,2}(?:\s*,\s*\d{1,2})*(?:†[^\]]*)?\])+)\s*\*\*/g;
+
+/** Turn citation markers into #cite-N links, which the renderer swaps for clickable markers. */
+function linkCitations(markdown: string) {
+  return markdown
+    .replace(BOLD_CITATION_RE, "$1") // models sometimes bold them: **[2]**
+    .replace(CITATION_RE, (_, nums: string) =>
+    nums.split(",").map((n) => `[${n.trim()}](#cite-${n.trim()})`).join("")
+  );
+}
+
+function CitationMark({ n, source, onOpen }: { n: number; source?: Source; onOpen?: (s: Source) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => source && onOpen?.(source)}
+      disabled={!source}
+      title={source ? `${source.filename} · page ${source.page}` : undefined}
+      aria-label={source ? `Source ${n}: ${source.filename}, page ${source.page}` : `Source ${n}`}
+      className="ml-1 inline-flex h-[18px] min-w-[18px] -translate-y-px items-center justify-center rounded-[4px] bg-redline/10 px-1 align-middle font-mono text-[10.5px] font-medium leading-none text-redline transition-colors hover:bg-redline hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:cursor-default disabled:hover:bg-redline/10 disabled:hover:text-redline"
+    >
+      {n}
+    </button>
+  );
 }
 
 const actionButton = "flex items-center gap-1 rounded-md px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-paper-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink";
@@ -54,6 +83,17 @@ function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
 export function MessageBubble({ message, onFeedback, onSourceClick, onDelete }: MessageBubbleProps) {
   const { id, role, content, sources, feedback, isStreaming, error, stopped, interrupted } = message;
 
+  const markdownComponents = useMemo<Components>(() => ({
+    a: ({ href, children }) => {
+      const cite = href?.match(/^#cite-(\d+)$/);
+      if (cite) {
+        const n = Number(cite[1]);
+        return <CitationMark n={n} source={sources?.find((s, i) => (s.n ?? i + 1) === n)} onOpen={onSourceClick} />;
+      }
+      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+    },
+  }), [sources, onSourceClick]);
+
   if (role === "user") {
     return (
       <div className="group flex flex-col items-end gap-1">
@@ -90,7 +130,7 @@ export function MessageBubble({ message, onFeedback, onSourceClick, onDelete }: 
             "prose-pre:border prose-pre:border-rule prose-pre:bg-paper-deep prose-pre:text-ink",
             isStreaming && "[&>*:last-child]:after:ml-0.5 [&>*:last-child]:after:inline-block [&>*:last-child]:after:h-4 [&>*:last-child]:after:w-0.5 [&>*:last-child]:after:animate-pulse [&>*:last-child]:after:bg-ink [&>*:last-child]:after:align-middle [&>*:last-child]:after:content-['']"
           )}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{linkCitations(content)}</ReactMarkdown>
           </div>
         )}
 
@@ -107,7 +147,7 @@ export function MessageBubble({ message, onFeedback, onSourceClick, onDelete }: 
                   className="flex max-w-[260px] items-center gap-1.5 rounded-md border border-rule bg-white px-2 py-1 font-mono text-[11.5px] text-ink-muted transition-colors hover:border-ink/40 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
                   title={`${s.filename} · page ${s.page}`}
                 >
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] bg-redline/10 text-[10px] font-medium text-redline">{i + 1}</span>
+                  <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[4px] bg-redline/10 px-0.5 text-[10px] font-medium text-redline">{s.n ?? i + 1}</span>
                   <FileText className="h-3 w-3 shrink-0" />
                   <span className="truncate">{s.filename}</span>
                   <span className="shrink-0">· p.{s.page}</span>

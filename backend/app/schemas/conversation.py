@@ -25,6 +25,7 @@ class ConversationListResponse(BaseModel):
 
 
 class SourceOut(BaseModel):
+    n: int | None = None  # citation number used in the answer text; absent on older messages
     filename: str
     page: int
     chunk_index: int

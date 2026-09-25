@@ -68,6 +68,8 @@ export type MessageRole = "user" | "assistant";
 export type MessageFeedback = "up" | "down";
 
 export interface Source {
+  /** Citation number used in the answer text ("[2]"); absent on older messages. */
+  n?: number;
   filename: string;
   page: number;
   chunk_index: number;

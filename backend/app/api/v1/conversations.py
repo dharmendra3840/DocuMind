@@ -4,19 +4,20 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.db.models.user import User
 from app.db.models.workspace import Workspace
 from app.db.models.conversation import Conversation, Message, MessageRole
+from app.db.models.document import Document, DocumentStatus
 from app.api.v1.deps import get_current_user
 from app.core.exceptions import NotFoundException, ForbiddenException
 from app.schemas.conversation import (
     ConversationCreate, ConversationOut, ConversationListResponse,
     MessageOut, MessageListResponse, QueryRequest, FeedbackRequest
 )
-from app.services.query import stream_rag_response, generate_conversation_title
+from app.services.query import stream_rag_response, generate_conversation_title, is_small_talk
 from app.utils.logger import get_logger
 from app.config import settings
 
@@ -114,9 +115,25 @@ async def query_conversation(
     history_messages = list(reversed(history_result.scalars().all()))
     history = [{"role": m.role.value, "content": m.content} for m in history_messages]
 
+    # Ready file names let greetings mention what the user can ask about.
+    names_result = await db.execute(
+        select(Document.filename)
+        .where(Document.workspace_id == workspace.id, Document.status == DocumentStatus.READY)
+        .order_by(Document.created_at.desc()).limit(20)
+    )
+    doc_names = list(names_result.scalars().all())
+
     user_msg = Message(conversation_id=conv_id, role=MessageRole.user, content=data.message)
     db.add(user_msg)
     await db.commit()
+    user_msg_id = user_msg.id
+
+    async def forget_question():
+        # No answer will be saved, so drop the question too; otherwise reloads
+        # show it dangling and it pollutes the history sent with later questions.
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(Message).where(Message.id == user_msg_id))
+            await session.commit()
 
     async def event_generator():
         full_response = ""
@@ -125,7 +142,7 @@ async def query_conversation(
         start = time.time()
 
         try:
-            async for event in stream_rag_response(str(workspace.id), data.message, history, data.include_sources, data.doc_ids):
+            async for event in stream_rag_response(str(workspace.id), data.message, history, data.include_sources, data.doc_ids, doc_names):
                 yield event
                 parsed = json.loads(event.removeprefix("data: ").strip())
                 if parsed["type"] == "token":
@@ -135,11 +152,12 @@ async def query_conversation(
                 elif parsed["type"] == "done":
                     latency_ms = parsed.get("latency_ms", int((time.time() - start) * 1000))
                 elif parsed["type"] == "error":
-                    # The model failed; the client shows the error. Don't save
-                    # it as an answer (the question itself is already saved).
+                    # The model failed; the client shows the error. Don't save it as an answer.
+                    await forget_question()
                     return
         except Exception as e:
             logger.error("query_stream_failed", conversation_id=str(conv_id), error=repr(e))
+            await forget_question()
             yield f"data: {json.dumps({'type': 'error', 'message': 'Something went wrong while answering. Please try again.'})}\n\n"
             return
 
@@ -158,14 +176,15 @@ async def query_conversation(
             conv_row = await session.get(Conversation, conv_id)
             needs_title = False
             if conv_row is not None:
-                needs_title = (conv_row.message_count or 0) == 0 and conv_row.title in PLACEHOLDER_TITLES
+                # Title from the first real question; a greeting would give "Hello there".
+                needs_title = conv_row.title in PLACEHOLDER_TITLES and not is_small_talk(data.message)
                 conv_row.message_count = (conv_row.message_count or 0) + 2
             await session.commit()
             message_id = assistant_msg.id
 
         yield f"data: {json.dumps({'type': 'message_saved', 'message_id': str(message_id)})}\n\n"
 
-        # Name the conversation after its first exchange only; done after
+        # Name the conversation after its first real question only; done after
         # message_saved so the answer isn't held up by a second LLM call.
         if needs_title and full_response:
             try:
