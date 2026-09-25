@@ -28,6 +28,18 @@ export function useCreateWorkspace() {
   });
 }
 
+export function useUpdateWorkspace() {
+  const qc = useQueryClient();
+  const updateWorkspace = useAppStore((s) => s.updateWorkspace);
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => apiClient.updateWorkspace(id, name),
+    onSuccess: (workspace) => {
+      updateWorkspace(workspace);
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
 export function useDeleteWorkspace() {
   const qc = useQueryClient();
   const removeWorkspace = useAppStore((s) => s.removeWorkspace);

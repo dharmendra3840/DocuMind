@@ -1,5 +1,3 @@
-import type { Viewport } from "next";
-import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import {
   ArrowRight, Check, Minus, X, Plus, FileText, Github,
   Bookmark, Crosshair, FolderTree, MessagesSquare, Gauge, ScanSearch,
@@ -9,13 +7,6 @@ import { AuthModalProvider, AuthTrigger } from "@/components/landing/AuthModalPr
 import { ProductPreview } from "@/components/landing/ProductPreview";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
-
-// Landing-only typefaces; the app keeps Inter.
-const serif = Newsreader({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
-const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex", display: "swap" });
-const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex-mono", display: "swap" });
-
-export const viewport: Viewport = { themeColor: "#F7F5F0" };
 
 const NAV_LINKS = [
   { href: "#why", label: "Why DocuMind" },
@@ -133,7 +124,7 @@ const primaryButton = `inline-flex items-center gap-2 rounded-lg bg-ink text-pap
 
 export default function LandingPage() {
   return (
-    <div className={`${serif.variable} ${plex.variable} ${plexMono.variable} landing-root relative min-h-screen overflow-x-hidden bg-paper font-plex text-ink antialiased selection:bg-marker`}>
+    <div className={`landing-root relative min-h-screen overflow-x-hidden bg-paper font-plex text-ink antialiased selection:bg-marker`}>
       <AuthModalProvider>
         {/* ── Navbar ─────────────────────────────────────────── */}
         <header className="fixed inset-x-0 top-0 z-40 border-b border-rule/80 bg-paper/85 backdrop-blur-md">

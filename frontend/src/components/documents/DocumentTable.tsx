@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Trash2, Eye, RefreshCw, FileText, File, FileCode } from "lucide-react";
-import { cn, formatBytes, formatDate } from "@/lib/utils";
+import { Trash2, Eye, FileText, File, FileCode } from "lucide-react";
+import { formatBytes, formatDate, getErrorMessage } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -17,6 +17,10 @@ interface DocumentTableProps {
 
 const FILE_ICONS = { pdf: FileText, docx: File, txt: FileCode };
 const STATUS_VARIANT = { READY: "ready", PROCESSING: "processing", UPLOADING: "uploading", FAILED: "failed" } as const;
+const STATUS_LABEL = { READY: "Ready", PROCESSING: "Indexing", UPLOADING: "Uploading", FAILED: "Failed" };
+
+const th = "px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-ink-muted";
+const iconButton = "rounded-md p-1.5 text-ink-muted transition-colors hover:bg-paper-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink";
 
 export function DocumentTable({ documents, workspaceId, onViewChunks }: DocumentTableProps) {
   const deleteDoc = useDeleteDocument(workspaceId);
@@ -27,72 +31,74 @@ export function DocumentTable({ documents, workspaceId, onViewChunks }: Document
     try {
       await deleteDoc.mutateAsync(confirmDelete.id);
       toastSuccess(`${confirmDelete.filename} deleted`);
-    } catch {
-      toastError("Failed to delete document");
+      setConfirmDelete(null);
+    } catch (err) {
+      toastError(getErrorMessage(err, "Couldn't delete the document"));
     }
-    setConfirmDelete(null);
   };
 
   if (!documents.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-16 h-16 rounded-full bg-bg-surface flex items-center justify-center mb-4">
-          <FileText className="w-7 h-7 text-text-muted" />
-        </div>
-        <p className="text-text-primary font-medium">No documents yet</p>
-        <p className="text-sm text-text-muted mt-1">Upload your first document to get started</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-rule bg-white px-6 py-16 text-center">
+        <FileText className="mb-3 h-7 w-7 text-ink-muted" strokeWidth={1.5} />
+        <p className="font-medium text-ink">No documents yet</p>
+        <p className="mt-1 text-sm text-ink-muted">Upload your first file above — you can ask questions as soon as it’s indexed.</p>
       </div>
     );
   }
 
   return (
     <>
-      <div className="overflow-hidden border border-border rounded-lg">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-bg-secondary">
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider">File</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider hidden md:table-cell">Pages</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider hidden md:table-cell">Size</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider hidden lg:table-cell">Added</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider">Actions</th>
+      <div className="overflow-hidden rounded-xl border border-rule bg-white">
+        <table className="w-full table-fixed text-sm">
+          <thead className="border-b border-rule bg-paper/60">
+            <tr>
+              <th className={th}>File</th>
+              <th className={`${th} hidden w-32 sm:table-cell`}>Status</th>
+              <th className={`${th} hidden w-20 md:table-cell`}>Pages</th>
+              <th className={`${th} hidden w-24 lg:table-cell`}>Size</th>
+              <th className={`${th} hidden w-32 lg:table-cell`}>Added</th>
+              <th className={`${th} w-[5.5rem] text-right`}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-rule">
             {documents.map((doc) => {
               const Icon = FILE_ICONS[doc.file_type] ?? File;
               return (
-                <tr key={doc.id} className="hover:bg-bg-surface/30 transition-colors group">
+                <tr key={doc.id} className="group transition-colors hover:bg-paper/50">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Icon className="w-4 h-4 text-text-muted shrink-0" />
-                      <div>
-                        <p className="font-medium text-text-primary">{doc.filename}</p>
-                        <p className="text-xs text-text-muted uppercase">{doc.file_type}</p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Icon className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.75} />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-ink" title={doc.filename}>{doc.filename}</p>
+                        <p className="text-xs uppercase text-ink-muted">
+                          {doc.file_type}
+                          {doc.chunk_count ? <span className="normal-case"> · {doc.chunk_count} passages</span> : null}
+                        </p>
+                        {/* Phones: status sits under the name instead of in its own column. */}
+                        <Badge variant={STATUS_VARIANT[doc.status]} className="mt-1 sm:hidden">{STATUS_LABEL[doc.status]}</Badge>
+                        {doc.status === "FAILED" && doc.error_message && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-redline" title={doc.error_message}>{doc.error_message}</p>
+                        )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[doc.status]}>{doc.status}</Badge>
+                  <td className="hidden px-4 py-3 sm:table-cell">
+                    <Badge variant={STATUS_VARIANT[doc.status]}>{STATUS_LABEL[doc.status]}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-text-muted hidden md:table-cell">{doc.page_count ?? "—"}</td>
-                  <td className="px-4 py-3 text-text-muted hidden md:table-cell">{doc.file_size_bytes ? formatBytes(doc.file_size_bytes) : "—"}</td>
-                  <td className="px-4 py-3 text-text-muted hidden lg:table-cell">{formatDate(doc.created_at)}</td>
+                  <td className="hidden px-4 py-3 tabular-nums text-ink-muted md:table-cell">{doc.page_count ?? "—"}</td>
+                  <td className="hidden px-4 py-3 tabular-nums text-ink-muted lg:table-cell">{doc.file_size_bytes ? formatBytes(doc.file_size_bytes) : "—"}</td>
+                  <td className="hidden px-4 py-3 text-ink-muted lg:table-cell">{formatDate(doc.created_at)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Always visible on touch screens; revealed on hover/focus with a mouse. */}
+                    <div className="flex items-center justify-end gap-1 md:opacity-0 md:transition-opacity md:focus-within:opacity-100 md:group-hover:opacity-100">
                       {doc.status === "READY" && (
-                        <button onClick={() => onViewChunks(doc)} className="p-1.5 rounded hover:bg-bg-surface text-text-muted hover:text-text-primary transition-colors" title="View chunks">
-                          <Eye className="w-3.5 h-3.5" />
+                        <button onClick={() => onViewChunks(doc)} className={`${iconButton} hover:text-ink`} aria-label={`View passages in ${doc.filename}`} title="View passages">
+                          <Eye className="h-4 w-4" />
                         </button>
                       )}
-                      {doc.status === "FAILED" && (
-                        <button className="p-1.5 rounded hover:bg-bg-surface text-text-muted hover:text-accent-amber transition-colors" title="Retry processing">
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button onClick={() => setConfirmDelete(doc)} className="p-1.5 rounded hover:bg-bg-surface text-text-muted hover:text-accent-red transition-colors" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => setConfirmDelete(doc)} className={`${iconButton} hover:text-redline`} aria-label={`Delete ${doc.filename}`} title="Delete">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -103,11 +109,11 @@ export function DocumentTable({ documents, workspaceId, onViewChunks }: Document
         </table>
       </div>
 
-      <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete document">
-        <p className="text-sm text-text-muted mb-4">
-          Delete <span className="font-medium text-text-primary">{confirmDelete?.filename}</span>? This removes all extracted chunks and cannot be undone.
+      <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete document?">
+        <p className="mb-5 text-sm leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">{confirmDelete?.filename}</span> and its indexed passages will be removed. Past answers that cited it keep their text, but you can’t ask about it any more.
         </p>
-        <div className="flex gap-2 justify-end">
+        <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>Cancel</Button>
           <Button variant="danger" size="sm" loading={deleteDoc.isPending} onClick={handleDelete}>Delete</Button>
         </div>

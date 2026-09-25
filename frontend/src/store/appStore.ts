@@ -10,6 +10,7 @@ interface AppState {
   activeWorkspaceId: string | null;
   workspaces: Workspace[];
   sidebarOpen: boolean;
+  mobileNavOpen: boolean;
   hydrated: boolean;
 
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
@@ -20,6 +21,7 @@ interface AppState {
   updateWorkspace: (workspace: Workspace) => void;
   removeWorkspace: (id: string) => void;
   toggleSidebar: () => void;
+  setMobileNavOpen: (open: boolean) => void;
   setHydrated: (hydrated: boolean) => void;
 }
 
@@ -32,6 +34,7 @@ export const useAppStore = create<AppState>()(
       activeWorkspaceId: null,
       workspaces: [],
       sidebarOpen: true,
+      mobileNavOpen: false,
       hydrated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
@@ -68,6 +71,7 @@ export const useAppStore = create<AppState>()(
         }),
 
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),
 
       setHydrated: (hydrated) => set({ hydrated }),
     }),

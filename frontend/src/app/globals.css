@@ -11,22 +11,20 @@
     scrollbar-gutter: stable;
   }
   body {
-    @apply bg-bg-primary text-text-primary font-sans antialiased;
+    @apply bg-paper text-ink font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-marker;
   }
   ::-webkit-scrollbar {
-    @apply w-1.5;
+    @apply w-1.5 h-1.5;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-bg-primary;
+    @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-bg-surface rounded-full;
-  }
-}
-
-@layer utilities {
-  .bg-noise {
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background: #d6d0c3;
+    @apply rounded-full;
   }
 }
 
@@ -38,22 +36,19 @@ html[data-authed] .landing-root {
   visibility: hidden;
 }
 
-/* The landing page is light; keep overscroll and the scrollbar on-palette. */
-body:has(.landing-root) {
-  background: theme("colors.paper.DEFAULT");
-}
-html:has(.landing-root) ::-webkit-scrollbar-track {
-  background: theme("colors.paper.DEFAULT");
-}
-html:has(.landing-root) ::-webkit-scrollbar-thumb {
-  background: #d6d0c3;
-}
-
 /* Highlighter stroke across the lower part of the text. */
 .marker-underline {
   background-image: linear-gradient(transparent 60%, theme("colors.marker") 60%, theme("colors.marker") 90%, transparent 90%);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.toast-in {
+  animation: toast-in 0.18s ease-out both;
 }
 
 @keyframes modal-appear {
@@ -87,7 +82,8 @@ html:has(.landing-root) ::-webkit-scrollbar-thumb {
   html {
     scroll-behavior: auto;
   }
-  .modal-appear {
+  .modal-appear,
+  .toast-in {
     animation: none;
   }
 }

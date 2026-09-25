@@ -134,7 +134,7 @@ async def query_conversation(
                 elif parsed["type"] == "done":
                     latency_ms = parsed.get("latency_ms", int((time.time() - start) * 1000))
         except Exception as e:
-            logger.exception("query_stream_failed", conversation_id=str(conv_id))
+            logger.error("query_stream_failed", conversation_id=str(conv_id), error=repr(e))
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             return
 

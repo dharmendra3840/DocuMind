@@ -2,10 +2,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 
+export const DOCUMENT_PAGE_SIZE = 100;
+
 export function useDocuments(workspaceId: string | null) {
   return useQuery({
     queryKey: ["documents", workspaceId],
-    queryFn: () => apiClient.listDocuments(workspaceId!),
+    // One page of 100 covers typical workspaces; the list shows a note if there are more.
+    queryFn: () => apiClient.listDocuments(workspaceId!, 1, DOCUMENT_PAGE_SIZE),
     enabled: !!workspaceId,
     refetchInterval: (query) => {
       const docs = query.state.data?.documents ?? [];

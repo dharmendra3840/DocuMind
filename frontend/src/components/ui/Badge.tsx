@@ -6,19 +6,19 @@ interface BadgeProps {
   className?: string;
 }
 
+const VARIANTS = {
+  ready: { box: "bg-emerald-50 text-emerald-800 border-emerald-200", dot: "bg-emerald-600" },
+  processing: { box: "bg-amber-50 text-amber-800 border-amber-200", dot: "bg-amber-500 animate-pulse" },
+  failed: { box: "bg-red-50 text-redline border-red-200", dot: "bg-redline" },
+  uploading: { box: "bg-paper-deep text-ink-soft border-rule", dot: "bg-ink-muted animate-pulse" },
+  default: { box: "bg-paper-deep text-ink-muted border-rule", dot: "" },
+};
+
 export function Badge({ variant = "default", children, className }: BadgeProps) {
-  const variants = {
-    ready: "bg-emerald-500/20 text-accent-green border-accent-green/30",
-    processing: "bg-amber-500/20 text-accent-amber border-accent-amber/30",
-    failed: "bg-red-500/20 text-accent-red border-accent-red/30",
-    uploading: "bg-indigo-500/20 text-accent border-accent/30",
-    default: "bg-bg-surface text-text-muted border-border",
-  };
+  const v = VARIANTS[variant];
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border", variants[variant], className)}>
-      {variant === "processing" && <span className="w-1.5 h-1.5 rounded-full bg-accent-amber animate-pulse" />}
-      {variant === "ready" && <span className="w-1.5 h-1.5 rounded-full bg-accent-green" />}
-      {variant === "failed" && <span className="w-1.5 h-1.5 rounded-full bg-accent-red" />}
+    <span className={cn("inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium", v.box, className)}>
+      {v.dot && <span className={cn("h-1.5 w-1.5 rounded-full", v.dot)} aria-hidden="true" />}
       {children}
     </span>
   );

@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useEffect, KeyboardEvent } from "react";
-import { Send, Square } from "lucide-react";
+import { useRef, useEffect, useState, KeyboardEvent } from "react";
+import { ArrowUp, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MessageInputProps {
@@ -8,72 +8,80 @@ interface MessageInputProps {
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
+  placeholder?: string;
 }
 
-export function MessageInput({ onSend, onStop, disabled, isStreaming }: MessageInputProps) {
+export function MessageInput({ onSend, onStop, disabled, isStreaming, placeholder = "Ask about your documents…" }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [hasText, setHasText] = useState(false);
+  const [modKey, setModKey] = useState("Ctrl");
 
   useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const resize = () => {
-      ta.style.height = "auto";
-      ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-    };
-    // initial resize
-    resize();
-    // resize on user input only
-    ta.addEventListener("input", resize);
-    return () => ta.removeEventListener("input", resize);
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) setModKey("⌘");
   }, []);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
-    if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      if (textareaRef.current) textareaRef.current.value = "";
-    }
+  const resize = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  };
+
+  const clear = () => {
+    if (textareaRef.current) textareaRef.current.value = "";
+    setHasText(false);
+    resize();
   };
 
   const submit = () => {
     const value = textareaRef.current?.value.trim();
     if (!value || disabled || isStreaming) return;
     onSend(value);
-    if (textareaRef.current) {
-      textareaRef.current.value = "";
-      textareaRef.current.style.height = "auto";
+    clear();
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+    if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      clear();
     }
   };
 
   return (
-    <div className="border-t border-border bg-bg-secondary p-4">
-      <div className="flex gap-3 items-end max-w-3xl mx-auto">
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          placeholder="Ask a question about your documents..."
-          onKeyDown={handleKeyDown}
-          disabled={disabled && !isStreaming}
-          className={cn(
-            "flex-1 bg-bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary resize-none",
-            "placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent",
-            "disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px] max-h-[120px]"
+    <div className="shrink-0 bg-gradient-to-t from-paper via-paper to-paper/0 px-4 pb-4 pt-2">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-end gap-2 rounded-2xl border border-rule bg-white p-2 shadow-[0_8px_30px_-12px_rgba(22,24,29,0.18)] transition-colors focus-within:border-ink/40">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            placeholder={placeholder}
+            onKeyDown={handleKeyDown}
+            onInput={() => { resize(); setHasText(!!textareaRef.current?.value.trim()); }}
+            disabled={disabled && !isStreaming}
+            aria-label="Message"
+            className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] text-ink placeholder:text-ink-muted/70 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          {isStreaming ? (
+            <button onClick={onStop} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink text-paper transition-colors hover:bg-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2" aria-label="Stop generating">
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </button>
+          ) : (
+            <button onClick={submit} disabled={disabled || !hasText}
+              className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2",
+                disabled || !hasText ? "cursor-not-allowed bg-paper-deep text-ink-muted" : "bg-ink text-paper hover:bg-ink-soft")}
+              aria-label="Send message">
+              <ArrowUp className="h-4 w-4" />
+            </button>
           )}
-        />
-        {isStreaming ? (
-          <button onClick={onStop} className="p-2.5 rounded-lg bg-accent-red hover:bg-red-400 text-white transition-colors shrink-0" title="Stop generation">
-            <Square className="w-4 h-4" />
-          </button>
-        ) : (
-          <button onClick={submit} disabled={disabled} className="p-2.5 rounded-lg bg-accent hover:bg-indigo-400 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
-            <Send className="w-4 h-4" />
-          </button>
-        )}
+        </div>
+        <p className="mt-2 hidden text-center text-xs text-ink-muted sm:block">
+          Enter to send · Shift+Enter for a new line · {modKey}+K to clear
+        </p>
       </div>
-      <p className="text-xs text-text-muted text-center mt-2">Enter to send · Shift+Enter for newline · ⌘K to clear</p>
     </div>
   );
 }

@@ -1,15 +1,14 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { apiClient, BASE_URL } from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { GoogleIcon } from "@/components/ui/GoogleIcon";
 import { Logo } from "@/components/ui/Logo";
+import { useDialog } from "@/hooks/useDialog";
 
 export type AuthMode = "login" | "register";
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function AuthModal({
   mode,
@@ -32,30 +31,7 @@ export function AuthModal({
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
 
-  // Escape to close, keep Tab inside the dialog, lock page scroll, and hand
-  // focus back to whatever opened the dialog when it closes.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => {
-      window.removeEventListener("keydown", handler);
-      document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus();
-    };
-  }, [onClose]);
+  useDialog(dialogRef, onClose);
 
   const switchMode = (m: AuthMode) => {
     if (m === mode) return;

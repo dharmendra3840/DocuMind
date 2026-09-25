@@ -14,6 +14,9 @@ export function toast(message: string, type: ToastType = "info") {
 export const toastSuccess = (msg: string) => toast(msg, "success");
 export const toastError = (msg: string) => toast(msg, "error");
 
+const ICONS = { success: CheckCircle, error: AlertCircle, info: Info };
+const COLORS = { success: "text-emerald-700", error: "text-redline", info: "text-ink-soft" };
+
 export function Toaster() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -25,19 +28,16 @@ export function Toaster() {
 
   useEffect(() => { addToastFn = add; return () => { addToastFn = null; }; }, [add]);
 
-  const icons = { success: CheckCircle, error: AlertCircle, info: Info };
-  const colors = { success: "text-accent-green", error: "text-accent-red", info: "text-accent" };
-
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80">
+    <div className="pointer-events-none fixed inset-x-4 top-4 z-[60] flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-80" role="status" aria-live="polite">
       {toasts.map((t) => {
-        const Icon = icons[t.type];
+        const Icon = ICONS[t.type];
         return (
-          <div key={t.id} className="flex items-start gap-3 bg-bg-secondary border border-border rounded-lg p-4 shadow-elevated animate-in slide-in-from-right-2">
-            <Icon className={cn("w-4 h-4 mt-0.5 shrink-0", colors[t.type])} />
-            <p className="text-sm text-text-primary flex-1">{t.message}</p>
-            <button onClick={() => setToasts((p) => p.filter((x) => x.id !== t.id))} className="text-text-muted hover:text-text-primary">
-              <X className="w-3.5 h-3.5" />
+          <div key={t.id} className="toast-in pointer-events-auto flex items-start gap-3 rounded-xl border border-rule bg-white p-4 shadow-elevated">
+            <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", COLORS[t.type])} aria-hidden="true" />
+            <p className="flex-1 text-sm text-ink">{t.message}</p>
+            <button onClick={() => setToasts((p) => p.filter((x) => x.id !== t.id))} className="rounded text-ink-muted hover:text-ink" aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         );

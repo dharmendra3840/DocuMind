@@ -1,31 +1,32 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/appStore";
 import { Sidebar } from "@/components/layout/Sidebar";
 
+// false while hydrating the server HTML, true on every render after that — so
+// client-side navigations render immediately instead of blanking for a frame.
+const subscribe = () => () => {};
+const useIsClient = () => useSyncExternalStore(subscribe, () => true, () => false);
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, accessToken, hydrated } = useAppStore();
-  const [isChecking, setIsChecking] = useState(true);
+  const isClient = useIsClient();
+  const user = useAppStore((s) => s.user);
+  const accessToken = useAppStore((s) => s.accessToken);
+  const hydrated = useAppStore((s) => s.hydrated);
+  const signedIn = !!user && !!accessToken;
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (!user || !accessToken) {
-      router.replace("/");
-    } else {
-      setIsChecking(false);
-    }
-  }, [hydrated, user, accessToken, router]);
+    if (isClient && hydrated && !signedIn) router.replace("/");
+  }, [isClient, hydrated, signedIn, router]);
 
-  if (!hydrated || isChecking || !user || !accessToken) return null;
+  if (!isClient || !hydrated || !signedIn) return <div className="h-[100dvh] bg-paper" />;
 
   return (
-    <div className="flex h-screen bg-bg-primary overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden bg-paper">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {children}
-      </main>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
     </div>
   );
 }

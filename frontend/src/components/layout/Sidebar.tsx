@@ -2,53 +2,63 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { FileText, MessageSquare, Plus, Trash2, ChevronDown, LogOut, PanelLeftClose, PanelLeft, Pencil, MoreHorizontal } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  FileText, MessageSquare, Plus, ChevronDown, LogOut, PanelLeftClose, PanelLeft,
+  Pencil, Trash2, MoreHorizontal, X, Check,
+} from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { cn, getErrorMessage, groupByDate } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { useWorkspaces, useCreateWorkspace } from "@/hooks/useWorkspace";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWorkspaces, useCreateWorkspace, useUpdateWorkspace, useDeleteWorkspace } from "@/hooks/useWorkspace";
+import { useConversations } from "@/hooks/useConversations";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { Logo } from "@/components/ui/Logo";
 import { toastSuccess, toastError } from "@/components/ui/Toaster";
-import { groupByDate } from "@/lib/utils";
 import type { Conversation } from "@/types/api";
 
-function ConvMenu({ conv, onDelete, onRename }: { conv: Conversation; onDelete: () => void; onRename: () => void }) {
-  const [open, setOpen] = useState(false);
+type Dialog =
+  | { kind: "new-workspace" }
+  | { kind: "rename-workspace"; id: string; name: string }
+  | { kind: "delete-workspace"; id: string; name: string }
+  | { kind: "delete-conversation"; conv: Conversation };
+
+/** Closes a popover on outside click or Escape. */
+function useDismiss(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open, close]);
+  return ref;
+}
 
+function ConvMenu({ onDelete, onRename }: { onDelete: () => void; onRename: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
   return (
-    <div ref={ref} className="relative shrink-0" onClick={(e) => e.preventDefault()}>
+    <div ref={ref} className="relative shrink-0">
       <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}
-        className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-        title="Options"
+        onClick={() => setOpen(!open)}
+        className="rounded p-1 text-ink-muted transition-colors hover:bg-paper-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+        aria-label="Conversation options"
+        aria-expanded={open}
       >
-        <MoreHorizontal className="w-3.5 h-3.5" />
+        <MoreHorizontal className="h-3.5 w-3.5" />
       </button>
       {open && (
-        <div className="absolute right-0 top-6 z-50 w-32 bg-slate-800 border border-slate-600 rounded-lg shadow-xl overflow-hidden">
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onRename(); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
-          >
-            <Pencil className="w-3 h-3" /> Rename
+        <div className="absolute right-0 top-7 z-50 w-36 overflow-hidden rounded-lg border border-rule bg-white py-1 shadow-elevated" role="menu">
+          <button role="menuitem" onClick={() => { setOpen(false); onRename(); }} className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-ink-soft hover:bg-paper">
+            <Pencil className="h-3.5 w-3.5" /> Rename
           </button>
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onDelete(); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-slate-700 transition-colors"
-          >
-            <Trash2 className="w-3 h-3" /> Delete
+          <button role="menuitem" onClick={() => { setOpen(false); onDelete(); }} className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-redline hover:bg-red-50">
+            <Trash2 className="h-3.5 w-3.5" /> Delete
           </button>
         </div>
       )}
@@ -59,60 +69,88 @@ function ConvMenu({ conv, onDelete, onRename }: { conv: Conversation; onDelete: 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, activeWorkspaceId, workspaces, setActiveWorkspace, clearAuth, sidebarOpen, toggleSidebar } = useAppStore();
+  const qc = useQueryClient();
+  const {
+    user, activeWorkspaceId, workspaces, setActiveWorkspace, clearAuth,
+    sidebarOpen, toggleSidebar, mobileNavOpen, setMobileNavOpen,
+  } = useAppStore();
   useWorkspaces();
   const createWorkspace = useCreateWorkspace();
-  const qc = useQueryClient();
+  const updateWorkspace = useUpdateWorkspace();
+  const deleteWorkspace = useDeleteWorkspace();
+  const { data: conversationsData } = useConversations(activeWorkspaceId);
 
-  const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const workspaceMenuRef = useDismiss(workspaceMenuOpen, () => setWorkspaceMenuOpen(false));
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [nameValue, setNameValue] = useState("");
+  const [busy, setBusy] = useState(false);
   const [renamingConvId, setRenamingConvId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const { data: conversationsData } = useQuery({
-    queryKey: ["conversations", activeWorkspaceId],
-    queryFn: () => apiClient.listConversations(activeWorkspaceId!),
-    enabled: !!activeWorkspaceId,
-    refetchInterval: 5000,
-  });
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setMobileNavOpen(false); }, [pathname, setMobileNavOpen]);
 
-  const grouped = conversationsData?.conversations
-    ? groupByDate(conversationsData.conversations as Conversation[])
-    : {};
+  const grouped = conversationsData?.conversations ? groupByDate(conversationsData.conversations) : {};
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const closeDialog = () => { setDialog(null); setNameValue(""); };
 
-  const handleDeleteConversation = async (convId: string) => {
+  const switchWorkspace = (id: string) => {
+    setActiveWorkspace(id);
+    setWorkspaceMenuOpen(false);
+    // A conversation belongs to one workspace; don't leave it open under another.
+    if (pathname.startsWith("/chat/")) router.push("/chat");
+  };
+
+  const submitWorkspaceName = async () => {
+    const name = nameValue.trim();
+    if (!name || !dialog) return;
     try {
-      await apiClient.deleteConversation(convId);
-      qc.invalidateQueries({ queryKey: ["conversations"] });
-      if (pathname === `/chat/${convId}`) router.push("/chat");
-      toastSuccess("Conversation deleted");
-    } catch {
-      toastError("Failed to delete conversation");
+      if (dialog.kind === "new-workspace") {
+        await createWorkspace.mutateAsync(name);
+        toastSuccess("Workspace created");
+        if (pathname.startsWith("/chat/")) router.push("/chat");
+      } else if (dialog.kind === "rename-workspace") {
+        await updateWorkspace.mutateAsync({ id: dialog.id, name });
+        toastSuccess("Workspace renamed");
+      }
+      closeDialog();
+    } catch (err) {
+      toastError(getErrorMessage(err, "Couldn't save the workspace"));
     }
   };
 
-  const handleRenameConversation = async (convId: string) => {
-    if (!renameValue.trim()) return;
+  const confirmDelete = async () => {
+    if (!dialog) return;
+    setBusy(true);
     try {
-      await apiClient.renameConversation(convId, renameValue.trim());
+      if (dialog.kind === "delete-workspace") {
+        await deleteWorkspace.mutateAsync(dialog.id);
+        toastSuccess(`Deleted “${dialog.name}”`);
+        if (pathname.startsWith("/chat/")) router.push("/chat");
+      } else if (dialog.kind === "delete-conversation") {
+        await apiClient.deleteConversation(dialog.conv.id);
+        qc.invalidateQueries({ queryKey: ["conversations"] });
+        if (pathname === `/chat/${dialog.conv.id}`) router.push("/chat");
+        toastSuccess("Conversation deleted");
+      }
+      closeDialog();
+    } catch (err) {
+      toastError(getErrorMessage(err, "Couldn't delete it. Please try again."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renameConversation = async (convId: string) => {
+    const title = renameValue.trim();
+    if (!title) return;
+    try {
+      await apiClient.renameConversation(convId, title);
       qc.invalidateQueries({ queryKey: ["conversations"] });
       setRenamingConvId(null);
-      toastSuccess("Renamed");
-    } catch {
-      toastError("Failed to rename");
-    }
-  };
-
-  const handleCreateWorkspace = async () => {
-    if (!newWorkspaceName.trim()) return;
-    try {
-      await createWorkspace.mutateAsync(newWorkspaceName.trim());
-      setNewWorkspaceName("");
-      setShowNewWorkspace(false);
-      toastSuccess("Workspace created");
-    } catch {
-      toastError("Failed to create workspace");
+    } catch (err) {
+      toastError(getErrorMessage(err, "Couldn't rename the conversation"));
     }
   };
 
@@ -124,158 +162,224 @@ export function Sidebar() {
       // Revoking the token server-side is best effort; always sign out locally.
     } finally {
       clearAuth();
+      qc.clear();
       router.replace("/");
     }
   };
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
-
-  if (!sidebarOpen) {
-    return (
-      <div className="flex flex-col items-center py-4 w-12 bg-slate-900 border-r border-slate-700">
-        <button onClick={toggleSidebar} className="text-slate-500 hover:text-slate-200 p-2">
-          <PanelLeft className="w-4 h-4" />
-        </button>
-      </div>
+  const navItem = (active: boolean) =>
+    cn(
+      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink",
+      active ? "bg-white font-medium text-ink shadow-sm ring-1 ring-rule" : "text-ink-soft hover:bg-paper-deep hover:text-ink"
     );
-  }
 
-  return (
-    <aside className="w-60 flex-shrink-0 bg-slate-900 border-r border-slate-700 flex flex-col h-full">
+  const panel = (
+    <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center">
-            <span className="text-white text-xs font-bold">D</span>
-          </div>
-          <span className="font-semibold text-sm text-white">DocuMind</span>
-        </div>
-        <button onClick={toggleSidebar} className="text-slate-500 hover:text-slate-200 p-1">
-          <PanelLeftClose className="w-4 h-4" />
+      <div className="flex h-14 shrink-0 items-center justify-between px-4">
+        <Link href="/chat" className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink" aria-label="DocuMind — new chat">
+          <Logo />
+        </Link>
+        <button onClick={toggleSidebar} className="hidden rounded-md p-1.5 text-ink-muted hover:bg-paper-deep hover:text-ink md:block" aria-label="Collapse sidebar">
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
+        <button onClick={() => setMobileNavOpen(false)} className="rounded-md p-1.5 text-ink-muted hover:bg-paper-deep hover:text-ink md:hidden" aria-label="Close menu">
+          <X className="h-5 w-5" />
         </button>
       </div>
 
       {/* Workspace switcher */}
-      <div className="px-3 py-2 border-b border-slate-700">
+      <div ref={workspaceMenuRef} className="relative px-3 pb-2">
         <button
           onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
-          className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800 text-sm text-slate-200"
+          className="flex w-full items-center justify-between gap-2 rounded-lg border border-rule bg-white px-3 py-2 text-left text-[13.5px] text-ink transition-colors hover:border-ink/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+          aria-expanded={workspaceMenuOpen}
+          aria-haspopup="menu"
         >
-          <span className="truncate">{activeWorkspace?.name ?? "Select workspace"}</span>
-          <ChevronDown className={cn("w-3.5 h-3.5 text-slate-500 transition-transform shrink-0", workspaceMenuOpen && "rotate-180")} />
+          <span className="min-w-0">
+            <span className="block text-[11px] uppercase tracking-wider text-ink-muted">Workspace</span>
+            <span className="block truncate font-medium">{activeWorkspace?.name ?? "Select workspace"}</span>
+          </span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-ink-muted transition-transform", workspaceMenuOpen && "rotate-180")} />
         </button>
         {workspaceMenuOpen && (
-          <div className="mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl overflow-hidden">
-            {workspaces.map((w) => (
-              <button
-                key={w.id}
-                onClick={() => { setActiveWorkspace(w.id); setWorkspaceMenuOpen(false); }}
-                className={cn("w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors", w.id === activeWorkspaceId ? "text-indigo-400" : "text-slate-300")}
-              >
-                {w.name}
-              </button>
-            ))}
-            <button
-              onClick={() => { setShowNewWorkspace(true); setWorkspaceMenuOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 flex items-center gap-2 border-t border-slate-700 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> New workspace
+          <div className="absolute inset-x-3 top-full z-50 mt-1 overflow-hidden rounded-lg border border-rule bg-white py-1 shadow-elevated" role="menu">
+            <div className="max-h-56 overflow-y-auto">
+              {workspaces.map((w) => (
+                <button key={w.id} role="menuitem" onClick={() => switchWorkspace(w.id)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13.5px] text-ink-soft hover:bg-paper">
+                  <span className="truncate">{w.name}</span>
+                  {w.id === activeWorkspaceId && <Check className="h-3.5 w-3.5 shrink-0 text-ink" />}
+                </button>
+              ))}
+            </div>
+            <div className="my-1 border-t border-rule" />
+            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setNameValue(""); setDialog({ kind: "new-workspace" }); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[13.5px] text-ink-soft hover:bg-paper">
+              <Plus className="h-3.5 w-3.5" /> New workspace
             </button>
+            {activeWorkspace && (
+              <>
+                <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setNameValue(activeWorkspace.name); setDialog({ kind: "rename-workspace", id: activeWorkspace.id, name: activeWorkspace.name }); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-[13.5px] text-ink-soft hover:bg-paper">
+                  <Pencil className="h-3.5 w-3.5" /> Rename workspace
+                </button>
+                <button role="menuitem" disabled={workspaces.length < 2}
+                  title={workspaces.length < 2 ? "You need at least one workspace" : undefined}
+                  onClick={() => { setWorkspaceMenuOpen(false); setDialog({ kind: "delete-workspace", id: activeWorkspace.id, name: activeWorkspace.name }); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-[13.5px] text-redline hover:bg-red-50 disabled:cursor-not-allowed disabled:text-ink-muted/60 disabled:hover:bg-transparent">
+                  <Trash2 className="h-3.5 w-3.5" /> Delete workspace
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="px-3 py-2 border-b border-slate-700 space-y-0.5">
-        <Link
-          href="/documents"
-          className={cn("flex items-center gap-2.5 px-2 py-1.5 rounded text-sm transition-colors", pathname.startsWith("/documents") ? "bg-indigo-500/20 text-indigo-400" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
-        >
-          <FileText className="w-4 h-4" /> Documents
+      {/* Primary nav */}
+      <nav className="space-y-0.5 px-3 pb-3" aria-label="Main">
+        <Link href="/chat" className={navItem(pathname === "/chat")}>
+          <Plus className="h-4 w-4" /> New chat
         </Link>
-        <Link
-          href="/chat"
-          className={cn("flex items-center gap-2.5 px-2 py-1.5 rounded text-sm transition-colors", pathname === "/chat" ? "bg-indigo-500/20 text-indigo-400" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
-        >
-          <MessageSquare className="w-4 h-4" /> New Chat
+        <Link href="/documents" className={navItem(pathname.startsWith("/documents"))}>
+          <FileText className="h-4 w-4" /> Documents
         </Link>
       </nav>
 
       {/* Conversation history */}
-      <div className="flex-1 overflow-y-auto px-3 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-rule px-3 py-3">
+        {Object.keys(grouped).length === 0 && (
+          <p className="px-2.5 py-2 text-[13px] leading-relaxed text-ink-muted">Your conversations will appear here.</p>
+        )}
         {Object.entries(grouped).map(([dateLabel, convs]) => (
-          <div key={dateLabel} className="mb-3">
-            <p className="text-xs text-slate-500 px-2 mb-1 uppercase tracking-wide">{dateLabel}</p>
-            {convs.map((conv) => (
-              <div key={conv.id} className="mb-0.5">
-                {renamingConvId === conv.id ? (
-                  <div className="flex items-center gap-1 px-2 py-1">
+          <div key={dateLabel} className="mb-4">
+            <p className="mb-1 px-2.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted">{dateLabel}</p>
+            {convs.map((conv) => {
+              const active = pathname === `/chat/${conv.id}`;
+              if (renamingConvId === conv.id) {
+                return (
+                  <div key={conv.id} className="flex items-center gap-1 px-1 py-1">
                     <input
                       autoFocus
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleRenameConversation(conv.id);
+                        if (e.key === "Enter") renameConversation(conv.id);
                         if (e.key === "Escape") setRenamingConvId(null);
                       }}
-                      className="flex-1 text-xs bg-slate-800 border border-indigo-500 rounded px-2 py-1 text-white outline-none"
+                      aria-label="Conversation title"
+                      className="min-w-0 flex-1 rounded-md border border-ink bg-white px-2 py-1 text-[13px] text-ink outline-none"
                     />
-                    <button onClick={() => handleRenameConversation(conv.id)} className="text-xs text-indigo-400 hover:text-white px-1 shrink-0">✓</button>
-                    <button onClick={() => setRenamingConvId(null)} className="text-xs text-slate-500 hover:text-white px-1 shrink-0">✕</button>
+                    <button onClick={() => renameConversation(conv.id)} className="rounded p-1 text-ink hover:bg-paper-deep" aria-label="Save title"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setRenamingConvId(null)} className="rounded p-1 text-ink-muted hover:bg-paper-deep" aria-label="Cancel rename"><X className="h-3.5 w-3.5" /></button>
                   </div>
-                ) : (
-                  <div className={cn("flex items-center gap-1 rounded transition-colors", pathname === `/chat/${conv.id}` ? "bg-indigo-500/20" : "hover:bg-slate-800")}>
-                    <Link
-                      href={`/chat/${conv.id}`}
-                      className={cn("flex items-center gap-2 px-2 py-1.5 text-sm flex-1 min-w-0 rounded", pathname === `/chat/${conv.id}` ? "text-indigo-400" : "text-slate-400 hover:text-slate-200")}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{conv.title ?? "Untitled chat"}</span>
-                    </Link>
+                );
+              }
+              return (
+                <div key={conv.id} className={cn("group flex items-center gap-1 rounded-lg pr-1 transition-colors", active ? "bg-white shadow-sm ring-1 ring-rule" : "hover:bg-paper-deep")}>
+                  <Link
+                    href={`/chat/${conv.id}`}
+                    aria-current={active ? "page" : undefined}
+                    className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-[13.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink", active ? "font-medium text-ink" : "text-ink-soft")}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                    <span className="truncate">{conv.title || "Untitled chat"}</span>
+                  </Link>
+                  {/* Always visible on touch screens; revealed on hover/focus with a mouse. */}
+                  <div className={cn("md:opacity-0 md:transition-opacity md:focus-within:opacity-100 md:group-hover:opacity-100", active && "md:opacity-100")}>
                     <ConvMenu
-                      conv={conv}
-                      onDelete={() => handleDeleteConversation(conv.id)}
+                      onDelete={() => setDialog({ kind: "delete-conversation", conv })}
                       onRename={() => { setRenamingConvId(conv.id); setRenameValue(conv.title ?? ""); }}
                     />
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
 
       {/* User */}
-      <div className="px-3 py-3 border-t border-slate-700">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-medium text-white uppercase shrink-0">
-            {user?.name?.[0] ?? user?.email?.[0] ?? "U"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-slate-300 truncate">{user?.name ?? user?.email}</p>
-          </div>
-          <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition-colors p-1 shrink-0" title="Sign out">
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
+      <div className="flex shrink-0 items-center gap-2.5 border-t border-rule px-4 py-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-medium uppercase text-paper" aria-hidden="true">
+          {user?.name?.[0] ?? user?.email?.[0] ?? "U"}
         </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium text-ink">{user?.name || user?.email}</p>
+          {user?.name && <p className="truncate text-[12px] text-ink-muted">{user.email}</p>}
+        </div>
+        <button onClick={handleLogout} className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-paper-deep hover:text-redline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink" title="Sign out" aria-label="Sign out">
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
+    </>
+  );
 
-      <Modal open={showNewWorkspace} onClose={() => setShowNewWorkspace(false)} title="New Workspace">
-        <div className="flex flex-col gap-4">
-          <Input
-            label="Workspace name"
-            value={newWorkspaceName}
-            onChange={(e) => setNewWorkspaceName(e.target.value)}
-            placeholder="e.g. Legal Q1, Thesis Research"
-            onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
-            autoFocus
-          />
-          <div className="flex gap-2 justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setShowNewWorkspace(false)}>Cancel</Button>
-            <Button size="sm" loading={createWorkspace.isPending} onClick={handleCreateWorkspace}>Create</Button>
+  return (
+    <>
+      {/* Mobile drawer backdrop */}
+      {mobileNavOpen && <div className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setMobileNavOpen(false)} aria-hidden="true" />}
+
+      {/* Desktop collapsed rail */}
+      {!sidebarOpen && (
+        <div className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-rule bg-paper-deep/40 py-3 md:flex">
+          <button onClick={toggleSidebar} className="rounded-md p-2 text-ink-muted hover:bg-paper-deep hover:text-ink" aria-label="Expand sidebar">
+            <PanelLeft className="h-4 w-4" />
+          </button>
+          <Link href="/chat" className="rounded-md p-2 text-ink-muted hover:bg-paper-deep hover:text-ink" aria-label="New chat"><Plus className="h-4 w-4" /></Link>
+          <Link href="/documents" className="rounded-md p-2 text-ink-muted hover:bg-paper-deep hover:text-ink" aria-label="Documents"><FileText className="h-4 w-4" /></Link>
+        </div>
+      )}
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-rule bg-paper transition-transform duration-200",
+          "md:static md:z-auto md:w-64 md:translate-x-0 md:bg-paper-deep/40 md:transition-none",
+          mobileNavOpen ? "translate-x-0 shadow-elevated" : "-translate-x-full",
+          !sidebarOpen && "md:hidden"
+        )}
+        aria-label="Sidebar"
+      >
+        {panel}
+      </aside>
+
+      {/* Dialogs */}
+      <Modal
+        open={dialog?.kind === "new-workspace" || dialog?.kind === "rename-workspace"}
+        onClose={closeDialog}
+        title={dialog?.kind === "rename-workspace" ? "Rename workspace" : "New workspace"}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); submitWorkspaceName(); }} className="flex flex-col gap-4">
+          {dialog?.kind === "new-workspace" && (
+            <p className="text-sm text-ink-muted">Workspaces keep documents and conversations separate — one per client, course, or project.</p>
+          )}
+          <Input label="Name" value={nameValue} onChange={(e) => setNameValue(e.target.value)} placeholder="e.g. Legal Q1, Thesis research" maxLength={100} autoFocus />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={!nameValue.trim()} loading={createWorkspace.isPending || updateWorkspace.isPending}>
+              {dialog?.kind === "rename-workspace" ? "Save" : "Create workspace"}
+            </Button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={dialog?.kind === "delete-workspace" || dialog?.kind === "delete-conversation"}
+        onClose={closeDialog}
+        title={dialog?.kind === "delete-workspace" ? "Delete workspace?" : "Delete conversation?"}
+      >
+        <p className="mb-5 text-sm leading-relaxed text-ink-muted">
+          {dialog?.kind === "delete-workspace" ? (
+            <>“<span className="font-medium text-ink">{dialog.name}</span>” and all of its documents and conversations will be permanently deleted.</>
+          ) : dialog?.kind === "delete-conversation" ? (
+            <>“<span className="font-medium text-ink">{dialog.conv.title || "Untitled chat"}</span>” and its messages will be permanently deleted.</>
+          ) : null}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={closeDialog}>Cancel</Button>
+          <Button variant="danger" size="sm" loading={busy} onClick={confirmDelete}>Delete</Button>
         </div>
       </Modal>
-    </aside>
+    </>
   );
 }
