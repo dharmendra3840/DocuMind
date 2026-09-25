@@ -18,6 +18,9 @@ def get_openai_client() -> openai_lib.AsyncOpenAI:
         kwargs = {"api_key": settings.openai_api_key}
         if settings.openai_base_url:
             kwargs["base_url"] = settings.openai_base_url
+        if "openrouter.ai" in settings.openai_base_url:
+            # Optional attribution headers OpenRouter uses for its app rankings.
+            kwargs["default_headers"] = {"HTTP-Referer": settings.frontend_url, "X-Title": "DocuMind"}
         _openai_client = openai_lib.AsyncOpenAI(**kwargs)
     return _openai_client
 

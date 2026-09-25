@@ -3,6 +3,7 @@ import time
 from typing import AsyncGenerator
 from app.services.embedder import embed_query, get_openai_client
 from app.services.vector_store import query_similar
+from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,6 +35,20 @@ Assistant: {first_assistant_response}
 Title:"""
 
 
+def _describe_llm_error(e: Exception) -> str:
+    err = str(e).lower()
+    status = getattr(e, "status_code", None)
+    if status == 401 or "invalid_api_key" in err or "invalid api key" in err:
+        return "The AI service rejected its API key. The site owner needs to update it."
+    if status == 402 or "insufficient_quota" in err or "credits" in err:
+        return "The AI service is out of credits. The site owner needs to top up the account."
+    if status == 404 or "model_not_found" in err or "does not exist" in err:
+        return "The configured AI model isn't available. The site owner needs to update LLM_MODEL."
+    if status == 429 or "rate limit" in err:
+        return "The AI service is busy right now. Please wait a moment and try again."
+    return "The AI service couldn't answer right now. Please try again."
+
+
 def _format_context(chunks: list[dict]) -> str:
     parts = []
     for chunk in chunks:
@@ -63,7 +78,7 @@ def _needs_expansion(query: str, history: list[dict]) -> bool:
 async def _expand_query(query: str) -> str:
     client = get_openai_client()
     response = await client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=settings.fast_model,
         messages=[{"role": "user", "content": QUERY_EXPANSION_PROMPT.format(question=query)}],
         max_tokens=200,
         temperature=0,
@@ -76,7 +91,7 @@ async def _expand_query(query: str) -> str:
 async def generate_conversation_title(first_user_message: str, first_assistant_response: str) -> str:
     client = get_openai_client()
     response = await client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=settings.fast_model,
         messages=[{"role": "user", "content": TITLE_GENERATION_PROMPT.format(
             first_user_message=first_user_message,
             first_assistant_response=first_assistant_response[:200],
@@ -114,7 +129,7 @@ async def stream_rag_response(
 
     try:
         stream = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=settings.llm_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT.format(context=context, history=history_text)},
                 {"role": "user", "content": query},
@@ -131,17 +146,11 @@ async def stream_rag_response(
                 yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
 
     except Exception as e:
-        logger.error("openai_stream_error", error=str(e))
-        err = str(e)
-        if "insufficient_quota" in err.lower():
-            msg = "OpenAI quota exceeded. Please add credits at platform.openai.com/billing."
-        elif "429" in err or "rate" in err.lower():
-            msg = "Rate limit reached — please wait a moment and try again."
-        elif "401" in err or "invalid_api_key" in err.lower():
-            msg = "Invalid OpenAI API key. Please check the OPENAI_API_KEY in your .env file."
-        else:
-            msg = f"OpenAI API error: {err[:200]}"
-        yield f"data: {json.dumps({'type': 'token', 'content': msg})}\n\n"
+        # Full provider error goes to the logs; users get a short, non-technical
+        # message as an `error` event, which is never saved as an answer.
+        logger.error("llm_stream_error", model=settings.llm_model, error=str(e))
+        yield f"data: {json.dumps({'type': 'error', 'message': _describe_llm_error(e)})}\n\n"
+        return
 
     if include_sources and chunks:
         sources = [

@@ -18,6 +18,7 @@ from app.schemas.conversation import (
 )
 from app.services.query import stream_rag_response, generate_conversation_title
 from app.utils.logger import get_logger
+from app.config import settings
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -133,9 +134,13 @@ async def query_conversation(
                     sources = parsed["sources"]
                 elif parsed["type"] == "done":
                     latency_ms = parsed.get("latency_ms", int((time.time() - start) * 1000))
+                elif parsed["type"] == "error":
+                    # The model failed; the client shows the error. Don't save
+                    # it as an answer (the question itself is already saved).
+                    return
         except Exception as e:
             logger.error("query_stream_failed", conversation_id=str(conv_id), error=repr(e))
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Something went wrong while answering. Please try again.'})}\n\n"
             return
 
         # The request-scoped `db` session is already closed by the time the
@@ -147,7 +152,7 @@ async def query_conversation(
                 content=full_response,
                 sources=sources if sources else None,
                 latency_ms=latency_ms,
-                model="llama-3.3-70b-versatile",
+                model=settings.llm_model,
             )
             session.add(assistant_msg)
             conv_row = await session.get(Conversation, conv_id)

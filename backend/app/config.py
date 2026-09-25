@@ -6,9 +6,17 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # OpenAI / OpenRouter
+    # LLM — any OpenAI-compatible API (OpenRouter, Groq, OpenAI). Model IDs are
+    # provider-specific, e.g. OpenRouter "anthropic/claude-…", Groq "llama-3.3-70b-versatile".
     openai_api_key: str = ""
     openai_base_url: str = ""
+    llm_model: str = "llama-3.3-70b-versatile"
+    # Cheaper model for query rewriting and conversation titles; defaults to llm_model.
+    llm_fast_model: str = ""
+
+    @property
+    def fast_model(self) -> str:
+        return self.llm_fast_model or self.llm_model
 
     # Vector Store
     vector_store: str = "chroma"
