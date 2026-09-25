@@ -75,17 +75,31 @@ def _needs_expansion(query: str, history: list[dict]) -> bool:
     return len(words) < 10 or has_pronoun
 
 
+def _llm_options() -> dict:
+    # Only sent when configured: non-reasoning models reject reasoning_effort.
+    if settings.llm_reasoning_effort:
+        return {"extra_body": {"reasoning_effort": settings.llm_reasoning_effort}}
+    return {}
+
+
+# Reasoning models spend part of max_tokens thinking before they answer, so the
+# short helper calls get generous budgets even though their output is tiny.
+HELPER_MAX_TOKENS = 600
+
+
 async def _expand_query(query: str) -> str:
     client = get_openai_client()
     response = await client.chat.completions.create(
         model=settings.fast_model,
         messages=[{"role": "user", "content": QUERY_EXPANSION_PROMPT.format(question=query)}],
-        max_tokens=200,
+        max_tokens=HELPER_MAX_TOKENS,
         temperature=0,
+        **_llm_options(),
     )
-    expanded = response.choices[0].message.content.strip()
+    expanded = (response.choices[0].message.content or "").strip()
     logger.info("query_expanded", original=query, expanded=expanded)
-    return expanded
+    # An empty rewrite (e.g. the budget went to reasoning) must not replace the question.
+    return expanded or query
 
 
 async def generate_conversation_title(first_user_message: str, first_assistant_response: str) -> str:
@@ -96,10 +110,11 @@ async def generate_conversation_title(first_user_message: str, first_assistant_r
             first_user_message=first_user_message,
             first_assistant_response=first_assistant_response[:200],
         )}],
-        max_tokens=20,
+        max_tokens=HELPER_MAX_TOKENS,
         temperature=0,
+        **_llm_options(),
     )
-    return response.choices[0].message.content.strip()
+    return (response.choices[0].message.content or "").strip().strip('"').strip()
 
 
 async def stream_rag_response(
@@ -137,11 +152,17 @@ async def stream_rag_response(
             max_tokens=2000,
             temperature=0.1,
             stream=True,
+            **_llm_options(),
         )
 
         async for chunk in stream:
+            # Some providers end with a usage-only chunk that has no choices.
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta.content
             if delta:
+                # gpt-oss cites with 【…】; keep the [file, p.N] style the prompt asks for.
+                delta = delta.replace("【", "[").replace("】", "]")
                 full_response += delta
                 yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
 

@@ -6,13 +6,16 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # LLM — any OpenAI-compatible API (OpenRouter, Groq, OpenAI). Model IDs are
-    # provider-specific, e.g. OpenRouter "anthropic/claude-…", Groq "llama-3.3-70b-versatile".
+    # LLM — any OpenAI-compatible API (Groq, OpenRouter, OpenAI). Model IDs are
+    # provider-specific, e.g. Groq "openai/gpt-oss-120b", OpenRouter "anthropic/claude-…".
     openai_api_key: str = ""
     openai_base_url: str = ""
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_model: str = "openai/gpt-oss-120b"
     # Cheaper model for query rewriting and conversation titles; defaults to llm_model.
     llm_fast_model: str = ""
+    # "low" | "medium" | "high" for reasoning models (gpt-oss, qwen3). Leave empty
+    # for models that don't reason — they reject the parameter.
+    llm_reasoning_effort: str = ""
 
     @property
     def fast_model(self) -> str:
